@@ -1,0 +1,8 @@
+{
+	"recommendations": [
+		"redhat.vscode-yaml",
+		"haskell.haskell",
+		"ms-vsliveshare.vsliveshare",
+		"ms-vsliveshare.vsliveshare-audio"
+	]
+}
