@@ -42,7 +42,7 @@ instance Show (SDouble Diff '[]) where
 
 prop_distance_solo :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 prop_distance_solo a1 a2 b1 b2 =
-  let d1 = sabs (a1 <-> a2)
-      d2 = sabs (b1 <-> b2)
-      dout = sabs $ (f a1 b1) <-> (f a2 b2)
-   in undefined -- TODO not sure how to compare d1 <+> d2 <= dout. Guess I need to make my own compare?
+  let d1 = abs $ unSDouble a1 - unSDouble a2
+      d2 = abs $ unSDouble b1 - unSDouble b2
+      dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
+   in d1 + d2 <= dout
