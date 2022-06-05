@@ -2,6 +2,11 @@
 
 This is a library to verify that a Solo annotation is correct.
 
+## How to run
+```bash
+stack test --fast
+```
+
 ## TODOs
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
 * Fix prop_distance

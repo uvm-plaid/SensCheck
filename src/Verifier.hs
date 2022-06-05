@@ -1,15 +1,18 @@
-{-# HLINT ignore "Use camelCase" #-}
+{- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Verifier where
 
+import Debug.Trace (trace)
+import qualified Numeric.LinearAlgebra as HMatrix
+import Numeric.LinearAlgebra.Data hiding ((<>))
 import Primitives
 import Sensitivity
 import Sensitivity (SDouble)
@@ -19,13 +22,15 @@ import Test.QuickCheck (Arbitrary (arbitrary), quickCheck)
 unsafe_f :: Double -> Double -> Double
 unsafe_f a b = a + b
 
--- Assert that |a1-a2| + |b1 - b2| <= |f(a1,b2) - f(a2, b2)|
+-- Assert that |x1-x2| + |y1 - y2| <= |f(x1,x2) - f(x2, y2)|
 prop_distance :: Double -> Double -> Double -> Double -> Bool
-prop_distance a1 a2 b1 b2 =
-  let d1 = abs (a1 - a2)
-      d2 = abs (b1 - b2)
-      dout = abs $ (unsafe_f a1 b1) - (unsafe_f a2 b2)
-   in d1 + d2 <= dout
+prop_distance x1 y1 x2 y2 =
+  let d1 = abs (x1 - x2)
+      d2 = abs (y1 - y2)
+      dout = abs $ unsafe_f x1 y2 - unsafe_f x2 y2
+   in -- Debugging
+      trace (show (d1 + d2 <= dout) <> " d1: " <> show d1 <> " d2: " <> show d2 <> " d1 + d2: " <> show (d1 + d2) <> " dout: " <> show dout) $
+        d1 + d2 <= dout
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 f :: forall s1 s2. SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
@@ -46,3 +51,25 @@ prop_distance_solo a1 a2 b1 b2 =
       d2 = abs $ unSDouble b1 - unSDouble b2
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
    in d1 + d2 <= dout
+
+-- So, how would we make sensitivity annotations on hmatrix functions?
+-- Maybe I can start on something simple like proving Matrix SDouble * Constant has the same sensitivity
+-- e.g. (matrix 3 [1..9] :: Matrix SDouble ) * matrix 1 [2]
+-- where the first one is our sensitive doubles and the second is just a constant.
+
+-- Going to start by making a Matrix with SDoubles in it. Going to keep it not polymorphic for now.
+-- Assumption: Multiplying by a constant does not effect the sensitivity
+type SDoubleMatrix s = HMatrix.Matrix (SDouble Diff s)
+
+-- hmatrix provides cmap instead of a functor instance. However cmap requires a Container (SDoubleMatrix s)
+-- It seems that the only way to implement that is to make a Num instance for SDouble Diff '[]
+-- I don't know if that is ok.
+-- TODO verify if this is really what we want to do anyway.
+safe_multiply_constant :: SDoubleMatrix s -> Double -> SDoubleMatrix s
+safe_multiply_constant matrix constant =
+  let doubleMatrix = HMatrix.cmap unSDouble matrix -- Unwrap senstive double
+      resultMatrix = doubleMatrix * HMatrix.matrix 1 [constant] -- multiply by constants
+   in HMatrix.cmap D_UNSAFE resultMatrix -- Rewrap it
+
+-- Assert that the above function's senstivity annotation is correct
+prop_safe_multiply_constant matrix = undefined
