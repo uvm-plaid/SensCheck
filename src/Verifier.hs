@@ -71,3 +71,14 @@ safe_multiply_constant matrix constant =
 
 -- Assert that the above function's senstivity annotation is correct
 prop_safe_multiply_constant matrix = undefined
+
+-- Without Solo - L2 sensitivity of matrix addition
+safe_add :: HMatrix.Matrix Double -> HMatrix.Matrix Double -> HMatrix.Matrix Double
+safe_add m1 m2 = m1 + m2
+
+prop_safe_add a1 a2 b1 b2 =
+  let d1 = HMatrix.norm_2 (a1 - a2) -- L2 distance between first arguments
+      d2 = HMatrix.norm_2 (b1 - b2) -- L2 distance between second arguments
+      -- L2 distance between two outputs
+      dout = HMatrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
+   in dout <= d1 + d2 + 0.000000001
