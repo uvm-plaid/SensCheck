@@ -28,13 +28,11 @@ prop_distance x1 y1 x2 y2 =
   let d1 = abs (x1 - x2)
       d2 = abs (y1 - y2)
       dout = abs $ unsafe_f x1 y2 - unsafe_f x2 y2
-   in -- Debugging
-      trace (show (d1 + d2 <= dout) <> " d1: " <> show d1 <> " d2: " <> show d2 <> " d1 + d2: " <> show (d1 + d2) <> " dout: " <> show dout) $
-        d1 + d2 <= dout
+   in dout <= d1 + d2
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 f :: forall s1 s2. SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
-f a b = D_UNSAFE $ unSDouble a * unSDouble b
+f a b = D_UNSAFE $ unSDouble a + unSDouble b
 
 instance Arbitrary (SDouble Diff '[]) where
   arbitrary = D_UNSAFE <$> arbitrary @Double
@@ -50,7 +48,7 @@ prop_distance_solo a1 a2 b1 b2 =
   let d1 = abs $ unSDouble a1 - unSDouble a2
       d2 = abs $ unSDouble b1 - unSDouble b2
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
-   in d1 + d2 <= dout
+   in dout <= d1 + d2
 
 -- So, how would we make sensitivity annotations on hmatrix functions?
 -- Maybe I can start on something simple like proving Matrix SDouble * Constant has the same sensitivity
