@@ -48,7 +48,7 @@ prop_distance_solo a1 a2 b1 b2 =
   let d1 = abs $ unSDouble a1 - unSDouble a2
       d2 = abs $ unSDouble b1 - unSDouble b2
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
-   in dout <= d1 + d2
+   in dout <= d1 + d2 + 0.000000001
 
 -- So, how would we make sensitivity annotations on hmatrix functions?
 -- Maybe I can start on something simple like proving Matrix SDouble * Constant has the same sensitivity

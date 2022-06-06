@@ -1,11 +1,11 @@
-import Test.QuickCheck (quickCheck)
+import Test.QuickCheck (quickCheck, withMaxSuccess)
 import Verifier (prop_distance, prop_distance_solo)
 
 test_distance :: IO ()
-test_distance = quickCheck prop_distance
+test_distance = quickCheck (withMaxSuccess 1000 prop_distance)
 
 test_distance_solo :: IO ()
-test_distance_solo = quickCheck prop_distance_solo
+test_distance_solo = quickCheck (withMaxSuccess 1000 prop_distance_solo)
 
 main :: IO ()
 main = do
