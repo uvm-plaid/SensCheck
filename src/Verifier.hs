@@ -1,8 +1,10 @@
 {- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DatatypeContexts #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
@@ -59,16 +61,6 @@ prop_distance_solo a1 a2 b1 b2 =
 -- Assumption: Multiplying by a constant does not effect the sensitivity
 type SDoubleMatrix s = HMatrix.Matrix (SDouble Diff s)
 
--- hmatrix provides cmap instead of a functor instance. However cmap requires a Container (SDoubleMatrix s)
--- It seems that the only way to implement that is to make a Num instance for SDouble Diff '[]
--- I don't know if that is ok.
--- TODO verify if this is really what we want to do anyway.
-safe_multiply_constant :: SDoubleMatrix s -> Double -> SDoubleMatrix s
-safe_multiply_constant matrix constant =
-  let doubleMatrix = HMatrix.cmap unSDouble matrix -- Unwrap senstive double
-      resultMatrix = doubleMatrix * HMatrix.matrix 1 [constant] -- multiply by constants
-   in HMatrix.cmap D_UNSAFE resultMatrix -- Rewrap it
-
 -- Assert that the above function's senstivity annotation is correct
 prop_safe_multiply_constant matrix = undefined
 
@@ -76,9 +68,27 @@ prop_safe_multiply_constant matrix = undefined
 safe_add :: HMatrix.Matrix Double -> HMatrix.Matrix Double -> HMatrix.Matrix Double
 safe_add m1 m2 = m1 + m2
 
+-- TODO Syed: Create Gen for Matrix Double
 prop_safe_add a1 a2 b1 b2 =
   let d1 = HMatrix.norm_2 (a1 - a2) -- L2 distance between first arguments
       d2 = HMatrix.norm_2 (b1 - b2) -- L2 distance between second arguments
       -- L2 distance between two outputs
       dout = HMatrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
    in dout <= d1 + d2 + 0.000000001
+
+-- Intermediate representation of a sensative double matrix that our clients use
+-- Use this data type when you need to do any hmatrix operations such as
+-- addition, multiplication, etc
+newtype SDInterMatrix (s :: SEnv) = SDInterMatrix [[SDouble Diff s]]
+
+safe_add_solo :: SDInterMatrix s1 -> SDInterMatrix s2 -> SDInterMatrix (s1 +++ s2)
+safe_add_solo sdim1 sdim2 =
+  -- Convert intermediate sensative matrix to double matrix and add them
+  let doubleMatrix = unsafeToDoubleMatrix sdim1 + unsafeToDoubleMatrix sdim2
+      -- Convert from matrix back to a list and rewrap the sensitive double
+      sdoubles = (fmap . fmap) D_UNSAFE $ HMatrix.toLists doubleMatrix
+   in SDInterMatrix sdoubles
+
+-- This is an internal helper function that exposes hmatrix operations that we wouldn't export
+unsafeToDoubleMatrix :: SDInterMatrix s -> Matrix Double
+unsafeToDoubleMatrix (SDInterMatrix a) = HMatrix.fromLists $ (fmap . fmap) unSDouble a
