@@ -65,12 +65,13 @@ prop_safe_add a1 a2 b1 b2 =
    in dout <= d1 + d2 + 0.000000001
 
 safe_add_solo :: [[SDouble Diff s1]] -> [[SDouble Diff s2]] -> [[SDouble Diff (s1 +++ s2)]]
-safe_add_solo sdim1 sdim2 =
-  -- Convert intermediate sensative matrix to double matrix and add them
-  let doubleMatrix = unsafeToDoubleMatrix sdim1 + unsafeToDoubleMatrix sdim2
+safe_add_solo sdoubles1 sdoubles2 =
+  -- Convert to double matrix and add them
+  let doubleMatrix = unsafeToDoubleMatrix sdoubles1 + unsafeToDoubleMatrix sdoubles2
    in -- Convert from matrix back to a list and rewrap the sensitive double
       (fmap . fmap) D_UNSAFE $ HMatrix.toLists doubleMatrix
 
--- This is an internal helper function that exposes hmatrix operations that we wouldn't export
+-- This is an internal helper function that exposes hmatrix operations
+-- Don't export this
 unsafeToDoubleMatrix :: [[SDouble Diff s]] -> Matrix Double
 unsafeToDoubleMatrix sdoubles = HMatrix.fromLists $ (fmap . fmap) unSDouble sdoubles
