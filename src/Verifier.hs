@@ -52,18 +52,6 @@ prop_distance_solo a1 a2 b1 b2 =
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
--- So, how would we make sensitivity annotations on hmatrix functions?
--- Maybe I can start on something simple like proving Matrix SDouble * Constant has the same sensitivity
--- e.g. (matrix 3 [1..9] :: Matrix SDouble ) * matrix 1 [2]
--- where the first one is our sensitive doubles and the second is just a constant.
-
--- Going to start by making a Matrix with SDoubles in it. Going to keep it not polymorphic for now.
--- Assumption: Multiplying by a constant does not effect the sensitivity
-type SDoubleMatrix s = HMatrix.Matrix (SDouble Diff s)
-
--- Assert that the above function's senstivity annotation is correct
-prop_safe_multiply_constant matrix = undefined
-
 -- Without Solo - L2 sensitivity of matrix addition
 safe_add :: HMatrix.Matrix Double -> HMatrix.Matrix Double -> HMatrix.Matrix Double
 safe_add m1 m2 = m1 + m2
@@ -76,19 +64,13 @@ prop_safe_add a1 a2 b1 b2 =
       dout = HMatrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
--- Intermediate representation of a sensative double matrix that our clients use
--- Use this data type when you need to do any hmatrix operations such as
--- addition, multiplication, etc
-newtype SDInterMatrix (s :: SEnv) = SDInterMatrix [[SDouble Diff s]]
-
-safe_add_solo :: SDInterMatrix s1 -> SDInterMatrix s2 -> SDInterMatrix (s1 +++ s2)
+safe_add_solo :: [[SDouble Diff s1]] -> [[SDouble Diff s2]] -> [[SDouble Diff (s1 +++ s2)]]
 safe_add_solo sdim1 sdim2 =
   -- Convert intermediate sensative matrix to double matrix and add them
   let doubleMatrix = unsafeToDoubleMatrix sdim1 + unsafeToDoubleMatrix sdim2
-      -- Convert from matrix back to a list and rewrap the sensitive double
-      sdoubles = (fmap . fmap) D_UNSAFE $ HMatrix.toLists doubleMatrix
-   in SDInterMatrix sdoubles
+   in -- Convert from matrix back to a list and rewrap the sensitive double
+      (fmap . fmap) D_UNSAFE $ HMatrix.toLists doubleMatrix
 
 -- This is an internal helper function that exposes hmatrix operations that we wouldn't export
-unsafeToDoubleMatrix :: SDInterMatrix s -> Matrix Double
-unsafeToDoubleMatrix (SDInterMatrix a) = HMatrix.fromLists $ (fmap . fmap) unSDouble a
+unsafeToDoubleMatrix :: [[SDouble Diff s]] -> Matrix Double
+unsafeToDoubleMatrix sdoubles = HMatrix.fromLists $ (fmap . fmap) unSDouble sdoubles
