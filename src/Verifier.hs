@@ -10,9 +10,8 @@
 
 module Verifier where
 
+import qualified Data.Matrix as Matrix
 import Debug.Trace (trace)
-import qualified Numeric.LinearAlgebra as HMatrix
-import Numeric.LinearAlgebra.Data hiding ((<>))
 import Primitives
 import Sensitivity
 import Sensitivity (SDouble)
@@ -50,35 +49,18 @@ prop_distance_solo a1 a2 b1 b2 =
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
--- So, how would we make sensitivity annotations on hmatrix functions?
--- Maybe I can start on something simple like proving Matrix SDouble * Constant has the same sensitivity
--- e.g. (matrix 3 [1..9] :: Matrix SDouble ) * matrix 1 [2]
--- where the first one is our sensitive doubles and the second is just a constant.
-
--- Going to start by making a Matrix with SDoubles in it. Going to keep it not polymorphic for now.
--- Assumption: Multiplying by a constant does not effect the sensitivity
-type SDoubleMatrix s = HMatrix.Matrix (SDouble Diff s)
-
--- hmatrix provides cmap instead of a functor instance. However cmap requires a Container (SDoubleMatrix s)
--- It seems that the only way to implement that is to make a Num instance for SDouble Diff '[]
--- I don't know if that is ok.
--- TODO verify if this is really what we want to do anyway.
-safe_multiply_constant :: SDoubleMatrix s -> Double -> SDoubleMatrix s
-safe_multiply_constant matrix constant =
-  let doubleMatrix = HMatrix.cmap unSDouble matrix -- Unwrap senstive double
-      resultMatrix = doubleMatrix * HMatrix.matrix 1 [constant] -- multiply by constants
-   in HMatrix.cmap D_UNSAFE resultMatrix -- Rewrap it
-
--- Assert that the above function's senstivity annotation is correct
-prop_safe_multiply_constant matrix = undefined
-
 -- Without Solo - L2 sensitivity of matrix addition
-safe_add :: HMatrix.Matrix Double -> HMatrix.Matrix Double -> HMatrix.Matrix Double
+safe_add :: Matrix.Matrix Double -> Matrix.Matrix Double -> Matrix.Matrix Double
 safe_add m1 m2 = m1 + m2
 
-prop_safe_add a1 a2 b1 b2 =
-  let d1 = HMatrix.norm_2 (a1 - a2) -- L2 distance between first arguments
-      d2 = HMatrix.norm_2 (b1 - b2) -- L2 distance between second arguments
-      -- L2 distance between two outputs
-      dout = HMatrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
-   in dout <= d1 + d2 + 0.000000001
+-- TODO manually calculate norm_2 if Data.Matrix does not provide it?
+--prop_safe_add a1 a2 b1 b2 =
+--  let d1 = Matrix.norm_2 (a1 - a2) -- L2 distance between first arguments
+--      d2 = Matrix.norm_2 (b1 - b2) -- L2 distance between second arguments
+--      -- L2 distance between two outputs
+--      dout = Matrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
+--   in dout <= d1 + d2 + 0.000000001
+
+-- With Solo - L2 sensitivity of matrix addition
+safe_add_solo :: Matrix.Matrix (SDouble Diff s1) -> Matrix.Matrix (SDouble Diff s2) -> Matrix.Matrix (SDouble Diff (s1 +++ s2))
+safe_add_solo m1 m2 = D_UNSAFE <$> (unSDouble <$> m1) + (unSDouble <$> m2)
