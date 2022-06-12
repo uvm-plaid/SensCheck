@@ -54,13 +54,17 @@ safe_add :: Matrix.Matrix Double -> Matrix.Matrix Double -> Matrix.Matrix Double
 safe_add m1 m2 = m1 + m2
 
 -- TODO manually calculate norm_2 if Data.Matrix does not provide it?
---prop_safe_add a1 a2 b1 b2 =
---  let d1 = Matrix.norm_2 (a1 - a2) -- L2 distance between first arguments
---      d2 = Matrix.norm_2 (b1 - b2) -- L2 distance between second arguments
---      -- L2 distance between two outputs
---      dout = Matrix.norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
---   in dout <= d1 + d2 + 0.000000001
+prop_safe_add a1 a2 b1 b2 =
+  let d1 = norm_2 (a1 - a2) -- L2 distance between first arguments
+      d2 = norm_2 (b1 - b2) -- L2 distance between second arguments
+      -- L2 distance between two outputs
+      dout = norm_2 $ (safe_add a1 b1) - (safe_add a2 b2)
+   in dout <= d1 + d2 + 0.000000001
 
 -- With Solo - L2 sensitivity of matrix addition
 safe_add_solo :: Matrix.Matrix (SDouble Diff s1) -> Matrix.Matrix (SDouble Diff s2) -> Matrix.Matrix (SDouble Diff (s1 +++ s2))
 safe_add_solo m1 m2 = D_UNSAFE <$> (unSDouble <$> m1) + (unSDouble <$> m2)
+
+-- L2 norm of a Matrix
+norm_2 :: Floating n => Matrix.Matrix n -> n
+norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
