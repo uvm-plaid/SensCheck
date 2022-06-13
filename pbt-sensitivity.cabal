@@ -35,6 +35,7 @@ library
       Solo2
       StdLib
       Verifier
+      VerifierQuickCheck
   other-modules:
       Paths_pbt_sensitivity
   hs-source-dirs:
