@@ -42,7 +42,7 @@ genMatrix row col = do
 -- and failing due to invalid operations
 genMatrixes :: Arbitrary a => Int -> Gen [Matrix.Matrix a]
 genMatrixes numMatrixes = do
-  -- Generate an arbitrary number of rows and columns
+  -- Generate an arbitrary number of rows and columns greater than 0
   (Positive row) <- arbitrary @(Positive Int)
   (Positive col) <- arbitrary @(Positive Int)
   -- Generate matrixes of the same row and col size
