@@ -10,6 +10,7 @@
 
 module Verifier where
 
+import Control.Monad (replicateM)
 import qualified Data.Matrix as Matrix
 import Debug.Trace (trace)
 import Primitives
@@ -49,11 +50,26 @@ prop_distance_solo a1 a2 b1 b2 =
       dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
+instance Arbitrary a => Arbitrary (Matrix.Matrix a) where
+  arbitrary = do
+    -- Generate an arbitrary number of rows and columns
+    row <- arbitrary @Int
+    col <- arbitrary @Int
+    -- Generate a list of arbitrary elements of size row * col
+    elems <- replicateM (row * col) arbitrary
+    -- Convert to Matrix
+    pure $ Matrix.fromList row col elems
+
 -- Without Solo - L2 sensitivity of matrix addition
 safe_add :: Matrix.Matrix Double -> Matrix.Matrix Double -> Matrix.Matrix Double
 safe_add m1 m2 = m1 + m2
 
--- TODO manually calculate norm_2 if Data.Matrix does not provide it?
+prop_safe_add ::
+  Matrix.Matrix Double ->
+  Matrix.Matrix Double ->
+  Matrix.Matrix Double ->
+  Matrix.Matrix Double ->
+  Bool
 prop_safe_add a1 a2 b1 b2 =
   let d1 = norm_2 (a1 - a2) -- L2 distance between first arguments
       d2 = norm_2 (b1 - b2) -- L2 distance between second arguments
