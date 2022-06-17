@@ -42,6 +42,9 @@ type L1List   = SList L1                                   -- $τ␣‹list›$ 
 type L2List   = SList L2                                   -- Not in Fuzz
 type LInfList = SList LInf                                 -- $τ␣‹alist›$ in Fuzz
 
+-- maybe????
+newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE { unSMatrix :: Matrix.Matrix (f s) }
+
 type family IsLT (o :: Ordering) :: Bool where
   IsLT 'LT = 'True
   IsLT _ = 'False
