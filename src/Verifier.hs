@@ -1,5 +1,6 @@
 {- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -8,7 +9,7 @@ module Verifier where
 import Control.Monad (replicateM)
 import qualified Data.Matrix as Matrix
 import Debug.Trace (trace)
-import Sensitivity (NMetric (Diff), SDouble (..), type (+++))
+import Sensitivity (CMetric (..), NMetric (Diff), SDouble (..), SEnv, type (+++))
 
 -- This is a function from an external library for example hmatrix
 unsafe_f :: Double -> Double -> Double
@@ -54,46 +55,27 @@ prop_safe_add a1 a2 b1 b2 =
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
 
+-- Similar to SList we need a custom data type
+newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}
+
+-- A Matrix of SDoubles with L2 Metrix
+type SDoubleMatrixL2 s = SMatrix L2 (SDouble Diff) s
+
 -- With Solo - L2 sensitivity of matrix addition
-safe_add_solo :: Matrix.Matrix (SDouble Diff s1) -> Matrix.Matrix (SDouble Diff s2) -> Matrix.Matrix (SDouble Diff (s1 +++ s2))
-safe_add_solo m1 m2 = D_UNSAFE <$> (unSDouble <$> m1) + (unSDouble <$> m2)
-
--- Matrix.Matrix (SDouble Diff s1)   == a matrix of sensitive doubles where each element has sensitivity s1
--- SMatrix L1 (SDouble Diff) s1      == a matrix of sensitive doubles with L1 sensitivity s1
-
--- [SDouble Diff s1]  == a list of sensitive doubles, each with the sensitivity env s1
--- almost always, lists have sensitivity tracked by a list-level metric (L1 or L2)
-
--- Think of a database of individuals, where one row = one person
--- The database can be represented as a list
--- Neighboring lists differ in one person's data (i.e. one element) but we don't know which one
--- This means neighboring lists have L1 distance of 1
-
--- For [SDouble Diff s1], distance between [1,2,3] and [2,3,4] is [1,1,1]
--- For SList L1 s1, distance between [1,2,3] and [1,3,3] is 1
--- For SList L1 s1, distance between [1,2,3] and [2,3,4] is 3
-
-
--- for each argument type:
---  SDouble Diff _ => abs $ a1 - a2
---  SMatrix L2 _ => norm_2 $ a1 - a2
--- for the output:
---  use the same rules
--- for the property:
---  dout <= [[ sensitivity_expression ]]
---  s1 +++ s2 => d1 + d2
---  ScaleSens n s => n * d1
-
--- Types of arguments should be SMatrix L2 (SDouble Diff) '[]
+safe_add_solo :: SDoubleMatrixL2 s1 -> SDoubleMatrixL2 s2 -> SDoubleMatrixL2 (s1 +++ s2)
+safe_add_solo m1 m2 =
+  SMatrix_UNSAFE $
+    D_UNSAFE
+      <$> (unSDouble <$> unSMatrix m1) + (unSDouble <$> unSMatrix m2)
 
 prop_safe_add_solo ::
-  Matrix.Matrix (SDouble 'Diff '[]) ->
-  Matrix.Matrix (SDouble 'Diff '[]) ->
-  Matrix.Matrix (SDouble 'Diff '[]) ->
-  Matrix.Matrix (SDouble 'Diff '[]) ->
+  SDoubleMatrixL2 '[] ->
+  SDoubleMatrixL2 '[] ->
+  SDoubleMatrixL2 '[] ->
+  SDoubleMatrixL2 '[] ->
   Bool
 prop_safe_add_solo a1 a2 b1 b2 =
-  let toDoubleMatrix m = unSDouble <$> m
+  let toDoubleMatrix m = unSDouble <$> unSMatrix m
       d1 = norm_2 $ toDoubleMatrix a1 - toDoubleMatrix a2 -- L2 distance between first arguments
       d2 = norm_2 $ toDoubleMatrix b1 - toDoubleMatrix b2
       -- L2 distance between two outputs
