@@ -9,8 +9,36 @@ stack test --fast
 
 ## TODOs
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
-* Fix prop_distance
-* Fix prop_distance_solo to use right comparision
+
+## Notes from June 17
+
+-- Matrix.Matrix (SDouble Diff s1)   == a matrix of sensitive doubles where each element has sensitivity s1
+-- SMatrix L1 (SDouble Diff) s1      == a matrix of sensitive doubles with L1 sensitivity s1
+
+-- [SDouble Diff s1]  == a list of sensitive doubles, each with the sensitivity env s1
+-- almost always, lists have sensitivity tracked by a list-level metric (L1 or L2)
+
+-- Think of a database of individuals, where one row = one person
+-- The database can be represented as a list
+-- Neighboring lists differ in one person's data (i.e. one element) but we don't know which one
+-- This means neighboring lists have L1 distance of 1
+
+-- For [SDouble Diff s1], distance between [1,2,3] and [2,3,4] is [1,1,1]
+-- For SList L1 s1, distance between [1,2,3] and [1,3,3] is 1
+-- For SList L1 s1, distance between [1,2,3] and [2,3,4] is 3
+
+-- for each argument type:
+--  SDouble Diff _ => abs $ a1 - a2
+--  SMatrix L2 _ => norm_2 $ a1 - a2
+-- for the output:
+--  use the same rules
+-- for the property:
+--  dout <= [[ sensitivity_expression ]]
+--  s1 +++ s2 => d1 + d2
+--  ScaleSens n s => n * d1
+
+-- Types of arguments should be SMatrix L2 (SDouble Diff) '[]
+
 
 ## Notes from 06/02
 what is the sensitivity of f?

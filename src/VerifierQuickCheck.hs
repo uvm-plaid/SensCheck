@@ -11,7 +11,7 @@ import Control.Monad (replicateM)
 import qualified Data.Matrix as Matrix
 import Sensitivity (NMetric (Diff), SDouble (..))
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive), forAll, quickCheck, suchThat, withMaxSuccess)
-import Verifier (prop_distance, prop_distance_solo, prop_safe_add, prop_safe_add_solo)
+import Verifier (SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE, unSMatrix), prop_distance, prop_distance_solo, prop_safe_add, prop_safe_add_solo)
 
 test_distance :: IO ()
 test_distance = quickCheck (withMaxSuccess 1000 prop_distance)
@@ -25,6 +25,9 @@ instance Arbitrary (SDouble Diff s) where
 -- Required for quickCheck
 instance Show (SDouble Diff '[]) where
   show sdouble = "SDouble Diff '[] " <> show (unSDouble sdouble)
+
+instance (Show (f s)) => Show (SMatrix m f s) where
+  show smatrix = show $ unSMatrix smatrix
 
 -- TODO at a later point create Arbitrary instance for: forall s. SDouble Diff s
 
@@ -48,6 +51,9 @@ genMatrixes numMatrixes = do
   -- Generate matrixes of the same row and col size
   replicateM numMatrixes $ genMatrix row col
 
+genSDL2Matrixes :: Int -> Gen [SDoubleMatrixL2 s]
+genSDL2Matrixes numMatrixes = (fmap . fmap) SMatrix_UNSAFE (genMatrixes numMatrixes)
+
 test_add :: IO ()
 test_add =
   quickCheck $
@@ -61,5 +67,5 @@ test_add_solo =
   quickCheck $
     withMaxSuccess 1000 $
       forAll -- Generate 4 matrixes of the same size
-        (genMatrixes 4)
+        (genSDL2Matrixes 4)
         (\[m1, m2, m3, m4] -> prop_safe_add_solo m1 m2 m3 m4)
