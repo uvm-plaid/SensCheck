@@ -68,6 +68,9 @@ safe_add_solo m1 m2 =
     D_UNSAFE
       <$> (unSDouble <$> unSMatrix m1) + (unSDouble <$> unSMatrix m2)
 
+toDoubleMatrix :: SMatrix m1 (SDouble m2) s -> Matrix.Matrix Double
+toDoubleMatrix m = unSDouble <$> unSMatrix m
+
 prop_safe_add_solo ::
   SDoubleMatrixL2 '[] ->
   SDoubleMatrixL2 '[] ->
@@ -75,8 +78,7 @@ prop_safe_add_solo ::
   SDoubleMatrixL2 '[] ->
   Bool
 prop_safe_add_solo a1 a2 b1 b2 =
-  let toDoubleMatrix m = unSDouble <$> unSMatrix m
-      d1 = norm_2 $ toDoubleMatrix a1 - toDoubleMatrix a2 -- L2 distance between first arguments
+  let d1 = norm_2 $ toDoubleMatrix a1 - toDoubleMatrix a2 -- L2 distance between first arguments
       d2 = norm_2 $ toDoubleMatrix b1 - toDoubleMatrix b2
       -- L2 distance between two outputs
       dout = norm_2 $ toDoubleMatrix (safe_add_solo a1 b1) - toDoubleMatrix (safe_add_solo a2 b2)
