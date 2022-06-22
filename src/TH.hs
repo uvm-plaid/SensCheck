@@ -5,22 +5,24 @@ module TH where
 
 import Control.Monad (unless, zipWithM)
 import Data.Coerce (coerce)
+import Data.List (transpose)
 import Data.Traversable (for)
 import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (qNewName)
+import Sensitivity (CMetric)
 import qualified Sensitivity
 import qualified Verifier
 
 type SEnvName = String
 
--- Working idea of an AST to parse into?
+-- Working idea of an AST to parse into
 data Term_S
   = Plus_S Term_S Term_S -- +++
   | SEnv_S SEnvName -- SENV type argument with Label
-  | SMatrix Term_S -- I need to capture SMatrix --TODO make this less flexible by only allowing Term_S?
+  | SMatrix CMetric Term_S -- I need to capture SMatrix --TODO make this less flexible by only allowing Term_S?
   | SList Term_S -- Assuming the same with SList
-  deriving (Show, Eq)
+  deriving (Show)
 
 -- TODO improve error handling
 -- TODO I think I need a LetE
@@ -28,11 +30,12 @@ genProp :: Name -> Q Dec
 genProp functionName = do
   type_ <- reifyType functionName
   let asts = parseASTs type_
-      propName = mkName $ "prop" <> show name
+      propName = mkName $ "prop" <> show functionName -- The quickcheck property function name we are generatinge
       argAsts = init asts -- The arguments to the function in AST form
       outputAst = last asts -- The output to the function in AST form
   (distanceStatements, generatedArgNames, generatedDistanceNames) <- unzip3 <$> mapM genDistanceStatement argAsts
-  (distanceOutStatement, generatedDistanceOutName) <- genDistanceOutStatement outputAst (transpose generatedArgNames)
+  let [inputs1, inputs2] = transpose generatedArgNames
+  (distanceOutStatement, generatedDistanceOutName) <- genDistanceOutStatement outputAst functionName inputs1 inputs2
   propertyStatement <- genPropertyStatement outputAst --I think this just needs the output AST but also the distance names
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       body = Clause [] (NormalB statements) []
@@ -62,6 +65,7 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name
 -- Given a SDouble uses abs
 -- Given a SMatrix uses norm function
 -- Given an SList uses TODO
+-- Also returns the generated argument names, and the generated distance name
 genDistanceStatement :: Term_S -> Q ([Dec], [GeneratedArgName], GeneratedDistanceName)
 genDistanceStatement ast =
   do
@@ -71,8 +75,8 @@ genDistanceStatement ast =
     -- Function to operate on and unwrapping function
     statement <- case ast of
       SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure $ VarE input1) - unSDouble $(pure $ VarE input2)|]
-      SMatrix _ -> [d|$(pure $ VarP distance) = norm_2 $ toDoubleMatrix $(pure $ VarE input1) - toDoubleMatrix $(pure $ VarE input2)|]
-      SList _ -> _ --TODO idk
+      SMatrix _ _ -> [d|$(pure $ VarP distance) = norm_2 $ toDoubleMatrix $(pure $ VarE input1) - toDoubleMatrix $(pure $ VarE input2)|]
+      SList _ -> undefined --TODO idk
       _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
     pure
       ( statement
@@ -85,17 +89,18 @@ genDistanceStatement ast =
 -- Same rule for replacing abs as genDistanceStatement
 -- TODO what if it's a 3 function argument or 1.
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Term_S -> Name -> [[GeneratedArgName]] -> Q ([Dec], GeneratedDistanceName)
-genDistanceOutStatement ast functionName generatedArgName = do
+genDistanceOutStatement :: Term_S -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q ([Dec], GeneratedDistanceName)
+genDistanceOutStatement ast functionName inputs1 inputs2 = do
   distance <- qNewName "distanceOut"
+  -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
       applyInputsOnFunction args = foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
-      function1Application = applyInputsOnFunction (head generatedArgName)
-      function2Application = applyInputsOnFunction (last generatedArgName)
+      function1Application = applyInputsOnFunction inputs1
+      function2Application = applyInputsOnFunction inputs2
   statement <- case ast of
     SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SMatrix _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SList _ -> _ --TODO idk
+    SMatrix _ _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SList _ -> undefined --TODO idk
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
   pure
     ( statement
