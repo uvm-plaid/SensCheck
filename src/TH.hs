@@ -4,6 +4,7 @@
 module TH where
 
 import Control.Monad (unless, zipWithM)
+import Data.Coerce (coerce)
 import Data.Traversable (for)
 import qualified GHC.Num
 import Language.Haskell.TH
@@ -24,16 +25,16 @@ data Term_S
 -- TODO improve error handling
 -- TODO I think I need a LetE
 genProp :: Name -> Q Dec
-genProp name = do
-  type_ <- reifyType name
+genProp functionName = do
+  type_ <- reifyType functionName
   let asts = parseASTs type_
       propName = mkName $ "prop" <> show name
       argAsts = init asts -- The arguments to the function in AST form
       outputAst = last asts -- The output to the function in AST form
   (distanceStatements, generatedArgNames, generatedDistanceNames) <- unzip3 <$> mapM genDistanceStatement argAsts
-  (distanceOutStatement, generatedDistanceOutName) <- genDistanceOutStatement outputAst
+  (distanceOutStatement, generatedDistanceOutName) <- genDistanceOutStatement outputAst (transpose generatedArgNames)
   propertyStatement <- genPropertyStatement outputAst --I think this just needs the output AST but also the distance names
-  let statements = LetE (distanceStatements <> [distanceOutStatement]) propertyStatement
+  let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       body = Clause [] (NormalB statements) []
   pure $ FunD propName [body]
 
@@ -61,19 +62,18 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name
 -- Given a SDouble uses abs
 -- Given a SMatrix uses norm function
 -- Given an SList uses TODO
-genDistanceStatement :: Term_S -> Q (Dec, [GeneratedArgName], GeneratedDistanceName)
+genDistanceStatement :: Term_S -> Q ([Dec], [GeneratedArgName], GeneratedDistanceName)
 genDistanceStatement ast =
   do
     input1 <- qNewName "input1"
     input2 <- qNewName "input2"
     distance <- qNewName "distance"
     -- Function to operate on and unwrapping function
-    (op, unwrap) <- case ast of
-      SEnv_S _ -> pure (VarE 'GHC.Num.abs, VarE 'Sensitivity.unSDouble)
-      SMatrix _ -> pure (VarE 'Verifier.norm_2, VarE 'Verifier.toDoubleMatrix)
+    statement <- case ast of
+      SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure $ VarE input1) - unSDouble $(pure $ VarE input2)|]
+      SMatrix _ -> [d|$(pure $ VarP distance) = norm_2 $ toDoubleMatrix $(pure $ VarE input1) - toDoubleMatrix $(pure $ VarE input2)|]
       SList _ -> _ --TODO idk
       _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
-    let statement = ValD (VarP distance) (NormalB undefined) []
     pure
       ( statement
       , [GeneratedArgName input1, GeneratedArgName input2]
@@ -85,8 +85,22 @@ genDistanceStatement ast =
 -- Same rule for replacing abs as genDistanceStatement
 -- TODO what if it's a 3 function argument or 1.
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Term_S -> Q (Dec, GeneratedDistanceName)
-genDistanceOutStatement = undefined
+genDistanceOutStatement :: Term_S -> Name -> [[GeneratedArgName]] -> Q ([Dec], GeneratedDistanceName)
+genDistanceOutStatement ast functionName generatedArgName = do
+  distance <- qNewName "distanceOut"
+  let applyInputsOnFunction :: [GeneratedArgName] -> Exp
+      applyInputsOnFunction args = foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
+      function1Application = applyInputsOnFunction (head generatedArgName)
+      function2Application = applyInputsOnFunction (last generatedArgName)
+  statement <- case ast of
+    SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SMatrix _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SList _ -> _ --TODO idk
+    _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
+  pure
+    ( statement
+    , GeneratedDistanceName distance
+    )
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
