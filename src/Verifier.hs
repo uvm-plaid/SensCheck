@@ -24,7 +24,7 @@ prop_distance x1 y1 x2 y2 =
    in dout <= d1 + d2
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
-f :: forall s1 s2. SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
+f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 f a b = D_UNSAFE $ unSDouble a + unSDouble b
 
 prop_distance_solo :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
