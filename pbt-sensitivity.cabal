@@ -34,6 +34,7 @@ library
       Sensitivity
       Solo2
       StdLib
+      TH
       Verifier
       VerifierQuickCheck
   other-modules:
@@ -44,6 +45,7 @@ library
       QuickCheck
     , base >=4.7 && <5
     , matrix
+    , template-haskell
   default-language: Haskell2010
 
 executable pbt-sensitivity-exe
@@ -58,6 +60,7 @@ executable pbt-sensitivity-exe
     , base >=4.7 && <5
     , matrix
     , pbt-sensitivity
+    , template-haskell
   default-language: Haskell2010
 
 test-suite pbt-sensitivity-test
@@ -73,4 +76,5 @@ test-suite pbt-sensitivity-test
     , base >=4.7 && <5
     , matrix
     , pbt-sensitivity
+    , template-haskell
   default-language: Haskell2010

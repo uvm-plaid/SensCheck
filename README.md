@@ -9,6 +9,7 @@ stack test --fast
 
 ## TODOs
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
+* remove template-haskell-utils
 
 ## Notes from June 17
 
