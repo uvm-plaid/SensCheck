@@ -31,7 +31,7 @@ type SEnv = [(Source, Sensitivity)]                   -- sensitivity environment
 data NMetric = Diff | Disc                            -- distance metrics for numeric types
 newtype SDouble  (m :: NMetric) (s :: SEnv) = D_UNSAFE { unSDouble :: Double }
 
-data CMetric = L1 | L2 | LInf                         -- metrics for compound types
+data CMetric = L1 | L2 | LInf deriving (Show)                         -- metrics for compound types
 newtype SPair (m :: CMetric) (f1 :: SEnv -> *) (f2 :: SEnv -> *) (s :: SEnv) = P_UNSAFE { unSPair :: (f1 s, f2 s) }
 type L1Pair   = SPair L1                                   -- $⊗$-pairs in Fuzz
 type L2Pair   = SPair L2                                   -- Not in Fuzz
