@@ -19,9 +19,28 @@ stack test --fast
 
 ## TODOs
 
+* Parse a type into an AST vs using a mock AST
+* Figure out how to use the generated props
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
 * remove template-haskell-utils
 * Add absdist diff somewhere https://github.com/uvm-plaid/pbt-sensitivity/pull/4#issuecomment-1165632399
+* How do we scan a file and then run our template haskell functions
+* Alternatively we can explicity call our genProp function. Downside: developer can forget something. Also more work for devs.
+
+
+## Notes July 7
+
+There are some functions with sensitvities encoded in the types
+
+e.g. SDouble Diff (ScaleSens 3 s1)
+Could be input and/or output I think
+But maybe not worth thinking about?
+The places where it shows up.
+
+Would be a question for the paper. What do we do about higher order functions.
+Can we have quick check generate functions?? Don't think it's possible.
+
+Maybe we really can only test against concrete functions and in that case it simplifies the type
 
 ## Notes from June 17
 
