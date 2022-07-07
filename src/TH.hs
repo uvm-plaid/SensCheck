@@ -9,6 +9,8 @@ import Data.List (transpose)
 import Data.Map
 import qualified Data.Map as M
 import Data.Traversable (for)
+import Debug.Trace (trace)
+import GHC.Base (Nat)
 import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
@@ -26,6 +28,7 @@ data Term_S
   | SDouble_S NMetric Term_S -- Assuming I need to capture this
   | SMatrix_S CMetric Term_S
   | SList Term_S -- Assuming I need to capture this
+  | SScaleSens Term_S Int
   deriving (Show)
 
 -- TODO improve error handling
@@ -69,16 +72,16 @@ genProp functionName = do
 -- You might notice I'm ignoring SDouble. Not sure if we really need to capture that.
 exampleAstPlus :: [Term_S]
 exampleAstPlus =
-  [ SDouble_S $ SEnv_S "s1"
-  , SDouble_S $ SEnv_S "s2"
-  , SDouble_S $ Plus_S (SDouble_S $ SEnv_S "s1") (SDouble_S $ SEnv_S "s2")
+  [ SDouble_S Diff $ SEnv_S "s1"
+  , SDouble_S Diff $ SEnv_S "s2"
+  , SDouble_S Diff $ Plus_S (SEnv_S "s1") (SEnv_S "s2")
   ]
 
 exampleAstDiscardS2 :: [Term_S]
 exampleAstDiscardS2 =
-  [ SDouble_S $ SEnv_S "s1"
-  , SDouble_S $ SEnv_S "s2"
-  , SDouble_S $ SEnv_S "s1"
+  [ SDouble_S Diff $ SEnv_S "s1"
+  , SDouble_S Diff $ SEnv_S "s2"
+  , SDouble_S Diff $ SEnv_S "s1"
   ]
 
 -- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
@@ -120,9 +123,8 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
       function1Application = applyInputsOnFunction inputs1
       function2Application = applyInputsOnFunction inputs2
   statement <- case ast of
-    SDouble_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SMatrix_S _ _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SList _ -> undefined --TODO idk
+    SDouble_S Diff _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SMatrix_S L2 _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
   pure
     ( statement
@@ -141,8 +143,13 @@ type SEnvToDistanceName = Map SEnvName Name
 -- And need to associate them to sensitivity values
 genPropertyStatement :: Term_S -> Q Exp
 genPropertyStatement ast = do
-  [e|dout <= 3|]
+  [e|dout <= $(computeRhs ast)|]
  where
-  termToExpr term = case term of
-    SEnv_S _ -> undefined
+  computeRhs :: Term_S -> Q Exp
+  computeRhs sexp = case sexp of
+    -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
+    SEnv_S s -> [|s|]
+    SDouble_S _ se -> computeRhs se
+    Plus_S se1 se2 -> [|$(computeRhs se1) + $(computeRhs se2)|]
+    SScaleSens se1 n -> [|n * $(computeRhs se1)|]
     _ -> undefined

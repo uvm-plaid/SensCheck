@@ -14,6 +14,9 @@ stack test --fast
 -- 3. Take over many files
 -- Do somethign like hspec discover preprocessor
 
+-- Example quasiquoter
+[gen| f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) |]
+
 ## TODOs
 
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
