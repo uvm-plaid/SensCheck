@@ -11,7 +11,7 @@ import qualified Data.Map as M
 import Data.Traversable (for)
 import qualified GHC.Num
 import Language.Haskell.TH
-import Language.Haskell.TH.Syntax (qNewName)
+import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
 import Sensitivity (CMetric)
 import qualified Sensitivity
 import qualified Verifier
@@ -19,9 +19,11 @@ import qualified Verifier
 type SEnvName = String
 
 -- Working idea of an AST to parse into
+-- TODO make an SDouble
 data Term_S
   = Plus_S Term_S Term_S -- +++
   | SEnv_S SEnvName -- --TODO make this less flexible by only allowing Term_S?
+  | SDouble_S Term_S -- Assuming I need to capture this
   | SMatrix_S CMetric Term_S
   | SList Term_S -- Assuming I need to capture this
   deriving (Show)
@@ -33,7 +35,7 @@ genProp :: Name -> Q Dec
 genProp functionName = do
   type_ <- reifyType functionName
   let typeAsts = parseASTs type_
-      propName = mkName $ "prop" <> show functionName -- The quickcheck property function name we are generatinge
+      propName = mkName $ show functionName <> "_prop" -- The quickcheck property function name we are generatinge
       inputTypeAsts = init typeAsts -- The input types of the function in AST form
       outputTypeAst = last typeAsts -- The output of the function in AST form
 
@@ -60,25 +62,27 @@ genProp functionName = do
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
       <$> qNewName "input1" <*> qNewName "input2" <*> qNewName "distance"
 
-testOutput :: IO ()
-testOutput = do
-  -- TODO is there a more automated way to do this?
-  out <- runQ $ genProp 'Verifier.safe_add
-  print out
+-- 1. COuld write my own quasi quoter
+-- 2. Take over a file
+-- 3. Take over many files
+-- Do somethign like hspec discover preprocessor
 
 -- >>> runQ [d|x :: (a,b,c); x = undefined|]
 -- [SigD x_3 (AppT (AppT (AppT (TupleT 3) (VarT a_0)) (VarT b_1)) (VarT c_2)),ValD (VarP x_3) (NormalB (VarE GHC.Err.undefined)) []]
 
 -- This might be the output of SDouble s1 -> SDouble s2 -> SDouble (s1 +++ s2)
 -- You might notice I'm ignoring SDouble. Not sure if we really need to capture that.
-exampleAst :: [Term_S]
-exampleAst = [SEnv_S "s1", SEnv_S "s2", Plus_S (SEnv_S "s1") (SEnv_S "s2")]
+exampleAstPlus :: [Term_S]
+exampleAstPlus = [SDouble_S $ SEnv_S "s1", SDouble_S $ SEnv_S "s2", Plus_S (SDouble_S $ SEnv_S "s1") (SDouble_S $ SEnv_S "s2")]
+
+exampleAstDiscardS2 :: [Term_S]
+exampleAstDiscardS2 = [SDouble_S $ SEnv_S "s1", SDouble_S $ SEnv_S "s2", SDouble_S $ SEnv_S "s1"]
 
 -- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 -- into a list of ASTs
 -- This is going to be painful
 parseASTs :: Type -> [Term_S]
-parseASTs typ = exampleAst -- Mock value. TODO figure out how to do this later.
+parseASTs typ = exampleAstDiscardS2 -- Mock value. TODO figure out how to do this later.
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name
@@ -94,7 +98,7 @@ genDistanceStatement :: Term_S -> GeneratedDistanceName -> GeneratedArgName -> G
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
   -- Function to operate on and unwrapping function
   case ast of
-    SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure $ VarE input1) - unSDouble $(pure $ VarE input2)|]
+    SDouble_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure $ VarE input1) - unSDouble $(pure $ VarE input2)|]
     SMatrix_S _ _ -> [d|$(pure $ VarP distance) = norm_2 $ toDoubleMatrix $(pure $ VarE input1) - toDoubleMatrix $(pure $ VarE input2)|]
     SList _ -> undefined --TODO idk
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
@@ -104,6 +108,7 @@ genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName inpu
 -- Same rule for replacing abs as genDistanceStatement
 -- TODO what if it's a 3 function argument or 1.
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
+-- TODO realized I'm not handling plus here?
 genDistanceOutStatement :: Term_S -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q ([Dec], GeneratedDistanceName)
 genDistanceOutStatement ast functionName inputs1 inputs2 = do
   distance <- qNewName "distanceOut"
@@ -113,7 +118,7 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
       function1Application = applyInputsOnFunction inputs1
       function2Application = applyInputsOnFunction inputs2
   statement <- case ast of
-    SEnv_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SDouble_S _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
     SMatrix_S _ _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
     SList _ -> undefined --TODO idk
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
