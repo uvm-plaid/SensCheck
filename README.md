@@ -21,6 +21,7 @@ stack test --fast
 
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
 * remove template-haskell-utils
+* Add absdist diff somewhere https://github.com/uvm-plaid/pbt-sensitivity/pull/4#issuecomment-1165632399
 
 ## Notes from June 17
 
