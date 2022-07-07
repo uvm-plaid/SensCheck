@@ -28,7 +28,7 @@ type Source = TL.Symbol                               -- sensitive data sources
 data Sensitivity = InfSens | NatSens TL.Nat           -- sensitivity values
 type SEnv = [(Source, Sensitivity)]                   -- sensitivity environments
 
-data NMetric = Diff | Disc                            -- distance metrics for numeric types
+data NMetric = Diff | Disc deriving (Show)                            -- distance metrics for numeric types
 newtype SDouble  (m :: NMetric) (s :: SEnv) = D_UNSAFE { unSDouble :: Double }
 
 data CMetric = L1 | L2 | LInf deriving (Show)                         -- metrics for compound types
