@@ -133,16 +133,12 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
   SMatrix_S L2 (SDouble_S Diff _) -> [|l2dist|]
   SMatrix_S L1 (SDouble_S Diff _) -> [|l1dist|]
   SMatrix_S L2 (SDouble_S Disc _) -> [|l2dist . diff|]
-  SMatrix_S L2 (SDouble_S Disc _) -> [|l1dist . diff|]
+  SMatrix_S L1 (SDouble_S Disc _) -> [|l1dist . diff|]
   SList_S L2 (SDouble_S Diff _) -> [|l2dist|]
   SList_S L1 (SDouble_S Diff _) -> [|l1dist|]
   SList_S L2 (SDouble_S Disc _) -> [|l2dist . diff|]
-  SList_S L2 (SDouble_S Disc _) -> [|l1dist . diff|]
+  SList_S L1 (SDouble_S Disc _) -> [|l1dist . diff|]
   _ -> fail $ "Unexpected input in τ AST: " <> show ast
-
--- Map to SEnv to Distance Name
--- TODO I need this for below
-type SEnvToDistanceName = Map SEnvName Name
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
