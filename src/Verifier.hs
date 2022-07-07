@@ -27,6 +27,9 @@ prop_distance x1 y1 x2 y2 =
 f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 f a b = D_UNSAFE $ unsafe_f (unSDouble a) (unSDouble b)
 
+-- Example quasiquoter
+-- [gen| f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) |]
+
 prop_distance_solo :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 prop_distance_solo a1 a2 b1 b2 =
   let d1 = abs $ unSDouble a1 - unSDouble a2

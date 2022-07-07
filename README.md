@@ -7,7 +7,15 @@ This is a library to verify that a Solo annotation is correct.
 stack test --fast
 ```
 
+## Other solutions
+
+-- 1. COuld write my own quasi quoter
+-- 2. Take over a file
+-- 3. Take over many files
+-- Do somethign like hspec discover preprocessor
+
 ## TODOs
+
 * Depend on solo library instead of copying and pasting code (might be difficult since I've had trouble compiling dduo repo on an M1)
 * remove template-haskell-utils
 
