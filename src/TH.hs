@@ -14,7 +14,7 @@ import GHC.Base (Nat)
 import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
-import Sensitivity (CMetric (L2), NMetric (Diff))
+import Sensitivity (CMetric (L1, L2), NMetric (Diff, Disc))
 import qualified Sensitivity
 import qualified Verifier
 
@@ -27,8 +27,8 @@ data Term_S
   | SEnv_S SEnvName -- TODO make this less flexible by only allowing Term_S?
   | SDouble_S NMetric Term_S -- Assuming I need to capture this
   | SMatrix_S CMetric Term_S
-  | SList Term_S -- Assuming I need to capture this
-  | SScaleSens Term_S Int
+  | SList_S CMetric Term_S -- Assuming I need to capture this
+  | ScaleSens_S Term_S Int
   deriving (Show)
 
 -- TODO improve error handling
@@ -88,7 +88,7 @@ exampleAstDiscardS2 =
 -- into a list of ASTs
 -- This is going to be painful
 parseASTs :: Type -> [Term_S]
-parseASTs typ = exampleAstPlus -- Mock value. TODO figure out how to do this later.
+parseASTs typ = exampleAstPlus -- Mock value. TODO figure out how to implement this later.
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name
@@ -102,12 +102,7 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name
 -- Given an SList uses TODO
 genDistanceStatement :: Term_S -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
-  -- Function to operate on and unwrapping function
-  case ast of
-    SDouble_S Diff _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure $ VarE input1) - unSDouble $(pure $ VarE input2)|]
-    SMatrix_S L2 (SDouble_S Diff _) -> [d|$(pure $ VarP distance) = norm_2 $ toDoubleMatrix $(pure $ VarE input1) - toDoubleMatrix $(pure $ VarE input2)|]
-    -- TODO add other cases https://github.com/uvm-plaid/pbt-sensitivity/pull/4#issuecomment-1165632399
-    _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
+  [d|$(pure $ VarP distance) = $(τ ast) $(pure $ VarE input1) $(pure $ VarE input2)|]
 
 -- Generates
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
@@ -131,6 +126,20 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
     , GeneratedDistanceName distance
     )
 
+τ :: Term_S -> Q Exp
+τ ast = case ast of
+  SDouble_S Diff _ -> [|absdist|]
+  SDouble_S Disc _ -> [|diff|]
+  SMatrix_S L2 (SDouble_S Diff _) -> [|l2dist|]
+  SMatrix_S L1 (SDouble_S Diff _) -> [|l1dist|]
+  SMatrix_S L2 (SDouble_S Disc _) -> [|l2dist . diff|]
+  SMatrix_S L2 (SDouble_S Disc _) -> [|l1dist . diff|]
+  SList_S L2 (SDouble_S Diff _) -> [|l2dist|]
+  SList_S L1 (SDouble_S Diff _) -> [|l1dist|]
+  SList_S L2 (SDouble_S Disc _) -> [|l2dist . diff|]
+  SList_S L2 (SDouble_S Disc _) -> [|l1dist . diff|]
+  _ -> fail $ "Unexpected input in τ AST: " <> show ast
+
 -- Map to SEnv to Distance Name
 -- TODO I need this for below
 type SEnvToDistanceName = Map SEnvName Name
@@ -151,5 +160,5 @@ genPropertyStatement ast = do
     SEnv_S s -> [|s|]
     SDouble_S _ se -> computeRhs se
     Plus_S se1 se2 -> [|$(computeRhs se1) + $(computeRhs se2)|]
-    SScaleSens se1 n -> [|n * $(computeRhs se1)|]
+    ScaleSens_S se1 n -> [|n * $(computeRhs se1)|]
     _ -> undefined
