@@ -32,7 +32,7 @@ instance Show (SEnv' -> Term') where
 data SEnv'
   = SEnv_ SEnvName -- Terminal Sensitivity Environment
   | Plus' SEnv' SEnv' -- +++
-  | ScaleSens' SEnv' SEnv'
+  | ScaleSens' SEnv' Int
   | TruncateSens'
   deriving (Show)
 
