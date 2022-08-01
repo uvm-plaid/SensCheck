@@ -10,4 +10,4 @@ import Verifier
 
 main :: IO ()
 main = do
-  putStrLn $(stringE . pprint =<< genProp 'safe_add)
+  putStrLn $(stringE . pprint =<< genProp 'f)

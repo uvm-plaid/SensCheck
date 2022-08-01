@@ -11,6 +11,8 @@ import qualified Data.Matrix as Matrix
 import Debug.Trace (trace)
 import Sensitivity (CMetric (..), NMetric (Diff), SDouble (..), SEnv, type (+++))
 
+-- TODO rename this module to represent user defined functions. Remove props.
+
 -- This is a function from an external library for example hmatrix
 unsafe_f :: Double -> Double -> Double
 unsafe_f a b = a + b
