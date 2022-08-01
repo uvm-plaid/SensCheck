@@ -7,6 +7,8 @@ module TestFunctions where
 import Sensitivity
 import Verifier (SMatrix)
 
+-- TODO test out tuples
+-- Think we need to figure out what code generation for that looks like
 allTypes ::
   SDouble Diff s1 ->
   SDouble Disc s2 ->

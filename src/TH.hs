@@ -137,14 +137,23 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
       -- TODO this is another special case where innerType is missing
-      if termName == ''Verifier.SMatrix
+      if termName == ''Verifier.SMatrix || termName == ''Sensitivity.SList
         then do
           cmetric <- nameToCMetric metricName
           senv <- typeToSEnv s
-          innerTerm <- typeToTerm (AppT innerType s) --TODO I can fake this by adding the application to SEnv and then removing it. Dirty tho
-          pure $ SMatrix' cmetric (const innerTerm) senv --TODO wrong
-        else fail $ "typeToTerm 3 unhandled case" ++ show termName
+          -- innerType should be turned into an SEnv -> Term. This applies the outer s environment to use parser logic.
+          let innerTypeApplied = AppT innerType s
+          innerTerm <- typeToTerm innerTypeApplied
+          pure $ SMatrix' cmetric (stripSEnvApp innerTerm) senv
+        else fail $ "typeToTerm 3 unhandled case " ++ show termName
     _ -> fail $ "typeToTerm main unhandled case" <> show typ
+  -- This removes a senvironment temporary added to use same parsing logic that should be stripped again
+  stripSEnvApp :: Term' -> (SEnv' -> Term')
+  stripSEnvApp typ = case typ of
+    SDouble' c _ -> SDouble' c
+    SMatrix' c i _ -> SMatrix' c i
+    SList' c i _ -> SList' c i
+    SPair' c i1 i2 _ -> SPair' c i1 i2
   nameToCMetric :: Name -> Q CMetric
   nameToCMetric name
     | name == 'Sensitivity.L1 = pure L1
