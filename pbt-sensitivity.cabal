@@ -34,6 +34,7 @@ library
       Sensitivity
       Solo2
       StdLib
+      TestFunctions
       TH
       Verifier
       VerifierQuickCheck
