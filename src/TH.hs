@@ -19,11 +19,15 @@ import Sensitivity
 import qualified Sensitivity
 import qualified Verifier
 
+-- Two issues with SEnv ->
+-- Parsing logic gets duplicated
+-- Pattern matching on functions isn't possible
+-- This is right though SEnv should always be on the outside I believe
 data Term'
   = SDouble' NMetric SEnv'
-  | SMatrix' CMetric Term'
-  | SList' CMetric Term'
-  | SPair' CMetric (SEnv' -> Term') (SEnv' -> Term') SEnv' -- This case is a bit different. The terms takes the same SEnv.
+  | SMatrix' CMetric (SEnv' -> Term') SEnv'
+  | SList' CMetric (SEnv' -> Term') SEnv'
+  | SPair' CMetric (SEnv' -> Term') (SEnv' -> Term') SEnv'
   deriving (Show)
 
 instance Show (SEnv' -> Term') where
@@ -41,7 +45,7 @@ data SEnv'
 type SEnvName = String
 
 -- TODO clean this up
-genProp :: Name -> Q Dec
+genProp :: Name -> Q [Dec]
 genProp functionName = do
   type_ <- reifyType functionName
   typeAsts <- parseASTs type_
@@ -67,7 +71,7 @@ genProp functionName = do
   propertyStatement <- genPropertyStatement outputTypeAst
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       body = Clause [] (NormalB statements) []
-  pure $ FunD propName [body]
+  pure [FunD propName [body]]
  where
   genNameForInputTypes ast =
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
@@ -130,14 +134,28 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
           nmetric <- nameToNMetric metricName
           senv <- typeToSEnv s
           pure $ SDouble' nmetric senv
-        else fail $ "typeToTerm unhandled case" ++ show termName
-    _ -> fail $ "typeToTerm unhandled case" <> show typ
-  nameToCMetric :: Name -> CMetric
-  nameToCMetric name = undefined
+        else fail $ "typeToTerm 2 unhandled case" ++ show termName
+    AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
+      -- TODO this is another special case where innerType is missing
+      if termName == ''Verifier.SMatrix
+        then do
+          cmetric <- nameToCMetric metricName
+          senv <- typeToSEnv s
+          innerTerm <- typeToTerm (AppT innerType s) --TODO I can fake this by adding the application to SEnv and then removing it. Dirty tho
+          pure $ SMatrix' cmetric (const innerTerm) senv --TODO wrong
+        else fail $ "typeToTerm 3 unhandled case" ++ show termName
+    _ -> fail $ "typeToTerm main unhandled case" <> show typ
+  nameToCMetric :: Name -> Q CMetric
+  nameToCMetric name
+    | name == 'Sensitivity.L1 = pure L1
+    | name == 'Sensitivity.L2 = pure L2
+    | name == 'Sensitivity.LInf = pure LInf
+    | otherwise = fail $ "Unhandled CMetric" <> show name
   nameToNMetric :: Name -> Q NMetric
   nameToNMetric name
     | name == 'Sensitivity.Diff = pure Diff
-    | otherwise = fail "Unhandled CMetric"
+    | name == 'Sensitivity.Disc = pure Disc
+    | otherwise = fail $ "Unhandled NMetric" <> show name
 
 -- Mock value. TODO figure out how to implement this later.
 
@@ -170,7 +188,7 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
       function2Application = applyInputsOnFunction inputs2
   statement <- case ast of
     SDouble' Diff _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SMatrix' L2 _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SMatrix' L2 _ _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
   pure
     ( statement
@@ -181,25 +199,28 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
 τ ast = case ast of
   SDouble' Diff _ -> [|absdist|]
   SDouble' Disc _ -> [|diff|]
-  SMatrix' L2 (SDouble' Diff _) -> [|l2dist|]
-  SMatrix' L1 (SDouble' Diff _) -> [|l1dist|]
-  SMatrix' L2 (SDouble' Disc _) -> [|l2dist . diff|]
-  SMatrix' L1 (SDouble' Disc _) -> [|l1dist . diff|]
-  SList' L2 (SDouble' Diff _) -> [|l2dist|]
-  SList' L1 (SDouble' Diff _) -> [|l1dist|]
-  SList' L2 (SDouble' Disc _) -> [|l2dist . diff|]
-  SList' L1 (SDouble' Disc _) -> [|l1dist . diff|]
+  SMatrix' cmetric innerType senv ->
+    let appliedInnerType = innerType senv
+     in case (cmetric, appliedInnerType) of
+          (L2, SDouble' Diff _) -> [|l2dist|]
+          (L1, SDouble' Diff _) -> [|l1dist|]
+          (L2, SDouble' Disc _) -> [|l2dist . diff|]
+          (L1, SDouble' Disc _) -> [|l1dist . diff|]
+  SList' cmetric innerType senv ->
+    let appliedInnerType = innerType senv
+     in case (cmetric, appliedInnerType) of
+          (L2, SDouble' Diff _) -> [|l2dist|]
+          (L1, SDouble' Diff _) -> [|l1dist|]
+          (L2, SDouble' Disc _) -> [|l2dist . diff|]
+          (L1, SDouble' Disc _) -> [|l1dist . diff|]
   _ -> fail $ "Unexpected input in τ AST: " <> show ast
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
--- But also add some small padding cause floating point artimatic
--- Notice I need all the distance names here
--- And need to associate them to sensitivity values
+-- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: Term' -> Q Exp
-genPropertyStatement ast = do
-  [e|dout <= $(computeRhs $ getSEnv ast)|]
+genPropertyStatement ast = [e|dout <= $(computeRhs $ getSEnv ast) + 0.00000001|]
  where
   computeRhs :: SEnv' -> Q Exp
   computeRhs sexp = case sexp of
@@ -212,7 +233,7 @@ genPropertyStatement ast = do
   -- e.g returns (s1 +++ s2) from SDouble Diff (s1 +++ s2)
   getSEnv :: Term' -> SEnv'
   getSEnv ast = case ast of
-    SDouble' nm se -> se
-    SMatrix' cm te -> getSEnv te
-    SList' cm te -> getSEnv te
-    SPair' cm _ _ se -> se
+    SDouble' _ se -> se
+    SMatrix' _ _ se -> se
+    SList' _ _ se -> se
+    SPair' _ _ _ se -> se
