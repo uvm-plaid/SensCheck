@@ -6,7 +6,7 @@ module TH where
 
 import Control.Monad (unless, zipWithM)
 import Data.Coerce (coerce)
-import Data.List (transpose)
+import Data.List (isInfixOf, transpose)
 import Data.Map
 import qualified Data.Map as M
 import Data.Traversable (for)
@@ -15,7 +15,7 @@ import GHC.Base (Nat)
 import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
-import Sensitivity (CMetric (L1, L2), NMetric (Diff, Disc))
+import Sensitivity
 import qualified Sensitivity
 import qualified Verifier
 
@@ -30,7 +30,7 @@ instance Show (SEnv' -> Term') where
   show f = "SEnv' -> Term'"
 
 data SEnv'
-  = SEnv_ SEnvName -- Terminal Sensitivity Environment
+  = SEnv_ Name -- Terminal Sensitivity Environment
   | Plus' SEnv' SEnv' -- +++
   | ScaleSens' SEnv' Int
   | TruncateSens'
@@ -44,8 +44,9 @@ type SEnvName = String
 genProp :: Name -> Q Dec
 genProp functionName = do
   type_ <- reifyType functionName
-  let typeAsts = parseASTs type_
-      propName = mkName $ show functionName <> "_prop" -- The quickcheck property function name we are generatinge
+  typeAsts <- parseASTs type_
+
+  let propName = mkName $ show functionName <> "_prop" -- The quickcheck property function name we are generatinge
       inputTypeAsts = init typeAsts -- The input types of the function in AST form
       outputTypeAst = last typeAsts -- The output of the function in AST form
 
@@ -77,25 +78,68 @@ genProp functionName = do
 
 -- This might be the output of SDouble s1 -> SDouble s2 -> SDouble (s1 +++ s2)
 -- You might notice I'm ignoring SDouble. Not sure if we really need to capture that.
-exampleAstPlus :: [Term_S]
-exampleAstPlus =
-  [ SDouble_S Diff $ SEnv_S "s1"
-  , SDouble_S Diff $ SEnv_S "s2"
-  , SDouble_S Diff $ Plus_S (SEnv_S "s1") (SEnv_S "s2")
-  ]
-
-exampleAstDiscardS2 :: [Term_S]
-exampleAstDiscardS2 =
-  [ SDouble_S Diff $ SEnv_S "s1"
-  , SDouble_S Diff $ SEnv_S "s2"
-  , SDouble_S Diff $ SEnv_S "s1"
-  ]
+-- exampleAstPlus :: [Term']
+-- exampleAstPlus =
+--   [ SDouble' Diff $ SEnv_ "s1"
+--   , SDouble' Diff $ SEnv_ "s2"
+--   , SDouble' Diff $ Plus' (SEnv_ "s1") (SEnv_ "s2")
+--   ]
+--
+-- exampleAstDiscardS2 :: [Term']
+-- exampleAstDiscardS2 =
+--   [ SDouble' Diff $ SEnv_ "s1"
+--   , SDouble' Diff $ SEnv_ "s2"
+--   , SDouble' Diff $ SEnv_ "s1"
+--   ]
 
 -- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 -- into a list of ASTs
 -- This is going to be painful
-parseASTs :: Type -> [Term_S]
-parseASTs typ = exampleAstPlus -- Mock value. TODO figure out how to implement this later.
+parseASTs :: Type -> Q [Term']
+parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
+ where
+  -- Remove Forall if found
+  stripForall t = case t of
+    ForallT _ _ t' -> t'
+    t' -> t' -- else do nothing
+    -- Split when encountering ->
+  splitArgs :: Type -> [Type]
+  splitArgs typ = case typ of
+    AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
+    t -> [t]
+  typeToSEnv :: Type -> Q SEnv'
+  typeToSEnv typ = case typ of
+    (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
+    AppT (AppT (ConT binaryOp) t1) t2 -> do
+      binaryOp <- nameToBinaryOp binaryOp
+      term1 <- typeToSEnv t1
+      term2 <- typeToSEnv t2
+      pure $ binaryOp term1 term2
+  nameToBinaryOp :: Name -> Q (SEnv' -> SEnv' -> SEnv')
+  nameToBinaryOp name
+    | isInfixOf "+++" $ show name = pure Plus'
+    | otherwise = fail $ "Unhandled binary op" <> show name
+  typeToTerm :: Type -> Q Term'
+  typeToTerm typ = case typ of
+    -- TODO last thing can be expression or SEnv'. Make a parse SEnv'. This handles SDouble s1 but not SDouble (s1 +++ s2)
+
+    AppT (AppT (ConT termName) (PromotedT metricName)) s ->
+      -- TODO I think SList and SMatrix follow this shape?
+      if termName == ''Sensitivity.SDouble
+        then do
+          nmetric <- nameToNMetric metricName
+          senv <- typeToSEnv s
+          pure $ SDouble' nmetric senv
+        else fail $ "typeToTerm unhandled case" ++ show termName
+    _ -> fail $ "typeToTerm unhandled case" <> show typ
+  nameToCMetric :: Name -> CMetric
+  nameToCMetric name = undefined
+  nameToNMetric :: Name -> Q NMetric
+  nameToNMetric name
+    | name == 'Sensitivity.Diff = pure Diff
+    | otherwise = fail "Unhandled CMetric"
+
+-- Mock value. TODO figure out how to implement this later.
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name
