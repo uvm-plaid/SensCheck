@@ -142,3 +142,48 @@ prop a1 a2 b1 b2 =
       dout = abs $ (unsafe_f a1 b1) - (unsafe_f a2 b2)
   in d1 + d2 <= dout
 
+---- Notes 08.04
+
+prop_distance_solo :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
+prop_distance_solo a1 a2 b1 b2 =
+  let d1 = abs $ unSDouble a1 - unSDouble a2
+      d2 = abs $ unSDouble b1 - unSDouble b2
+      dout = abs $ unSDouble (f a1 b1) - unSDouble (f a2 b2)
+   in dout <= d1 + d2 + 0.000000001
+
+a1 and a2 should be same type (A)
+b1 and b2 should be same type (B)
+
+
+let's say f does (s1 ++ s2)
+
+d1 is associated to s1 or type A which contains s1
+d2 is associated to s2 or type B which contains s2
+
+
+d1 is computed from all type As
+d2 is computed from all type Bs
+
+so my parsing logic needs all distance variables and associated sensitivty value.
+Then do a reverse lookup to retrieve the distance variable given the sensitivity value.
+
+I associate distance variables by getting the term of the first thing then getting the s env from it
+
+-- TODO not sure what to do with this
+f:: SDouble Diff s1 -> SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
+-- This would generate 2 distance statements with the s1 associated to it.
+-- Potential solution use whatever comes in order.
+-- So create a Map SEnv [DistanceName]. Where the [DistanceName] is ordered by occurance.
+-- When I encounter an SEnv. Do a lookup and pop from the List.
+-- Then recursively call with that removed DistanceName.
+
+
+TODO just realized you can have a distance with multiple SEnv.
+
+
+f:: SDouble Diff (s1 +++ s2) -> SDouble Diff (s3 +++ s4) -> SDouble Diff ((s1 +++ s2) +++ (s3 +++ s4))
+-- This completely screws up computeRhs. Opinion just ignore it for now?
+
+
+
+

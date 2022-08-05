@@ -60,6 +60,8 @@ prop_safe_add a1 a2 b1 b2 =
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
 
+-- TODO L1 https://programming-dp.com/notebooks/ch6.html#vector-valued-functions-and-their-sensitivities
+
 -- Similar to SList we need a custom data type
 newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}
 

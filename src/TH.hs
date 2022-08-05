@@ -19,10 +19,6 @@ import Sensitivity
 import qualified Sensitivity
 import qualified Verifier
 
--- Two issues with SEnv ->
--- Parsing logic gets duplicated
--- Pattern matching on functions isn't possible
--- This is right though SEnv should always be on the outside I believe
 data Term'
   = SDouble' NMetric SEnv'
   | SMatrix' CMetric (SEnv' -> Term') SEnv'
@@ -38,19 +34,23 @@ data SEnv'
   | Plus' SEnv' SEnv' -- +++
   | ScaleSens' SEnv' Int
   | TruncateSens'
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 -- Name of sensitivty environment
 -- For example the name of `SDouble Diff s1` is s1
 type SEnvName = String
 
--- TODO clean this up
-genProp :: Name -> Q [Dec]
+-- Given an SEnv return the associated distance statement
+-- TODO We're not handling associations to complicated s values and distance names such as s1 +++ s2.
+-- I guess we could it's a weird case anyway. But allowing the representation and would rather fail late instead of early.
+type SEnvToDistance = Map SEnv' [GeneratedDistanceName]
+
 genProp functionName = do
   type_ <- reifyType functionName
   typeAsts <- parseASTs type_
 
-  let propName = mkName $ show functionName <> "_prop" -- The quickcheck property function name we are generatinge
+  let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
+      propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generatinge
       inputTypeAsts = init typeAsts -- The input types of the function in AST form
       outputTypeAst = last typeAsts -- The output of the function in AST form
 
@@ -62,15 +62,19 @@ genProp functionName = do
       (\(ast, input1, input2, distance) -> genDistanceStatement ast distance input1 input2)
       generatedNamesForInputType
 
-  -- Create the distance out statement.
-  -- Gather all the arguments to the first call to F and all the arguments for the second call to F
-  let inputs1 = (\(_, input1, _, _) -> input1) <$> generatedNamesForInputType
-      inputs2 = (\(_, _, input2, _) -> input2) <$> generatedNamesForInputType
-  (distanceOutStatement, generatedDistanceOutName) <- genDistanceOutStatement outputTypeAst functionName inputs1 inputs2
+  let senvToDistance :: SEnvToDistance
+      senvToDistance = fromListWith (++) $ (\(term, _, _, distanceName) -> (getSEnv term, [distanceName])) <$> generatedNamesForInputType
 
-  propertyStatement <- genPropertyStatement outputTypeAst
+      -- Create the distance out statement.
+      -- Gather all the arguments to the first call to F and all the arguments for the second call to F
+      inputs1 = (\(_, input1, _, _) -> input1) <$> generatedNamesForInputType
+      inputs2 = (\(_, _, input2, _) -> input2) <$> generatedNamesForInputType
+  distanceOutStatement <- genDistanceOutStatement outputTypeAst functionName inputs1 inputs2
+
+  propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
-      body = Clause [] (NormalB statements) []
+      inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2) -- TODO I think I need to actually interleave these
+      body = Clause inputs (NormalB statements) []
   pure [FunD propName [body]]
  where
   genNameForInputTypes ast =
@@ -119,6 +123,7 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
       term1 <- typeToSEnv t1
       term2 <- typeToSEnv t2
       pure $ binaryOp term1 term2
+    _ -> fail $ "typeToSEnv unhandled case " <> show typ
   nameToBinaryOp :: Name -> Q (SEnv' -> SEnv' -> SEnv')
   nameToBinaryOp name
     | isInfixOf "+++" $ show name = pure Plus'
@@ -126,7 +131,6 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
   typeToTerm :: Type -> Q Term'
   typeToTerm typ = case typ of
     -- TODO last thing can be expression or SEnv'. Make a parse SEnv'. This handles SDouble s1 but not SDouble (s1 +++ s2)
-
     AppT (AppT (ConT termName) (PromotedT metricName)) s ->
       -- TODO I think SList and SMatrix follow this shape?
       if termName == ''Sensitivity.SDouble
@@ -166,18 +170,12 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
     | name == 'Sensitivity.Disc = pure Disc
     | otherwise = fail $ "Unhandled NMetric" <> show name
 
--- Mock value. TODO figure out how to implement this later.
-
 -- Represents generated Arguments
-newtype GeneratedArgName = GeneratedArgName Name
-newtype GeneratedDistanceName = GeneratedDistanceName Name
+newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
+newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, Ord)
 
--- Generates
--- d1 = abs $ unSDouble input1 - unSDouble input2
--- The above uses abs but it depends on type:
--- Given a SDouble uses abs
--- Given a SMatrix uses norm function
--- Given an SList uses TODO
+-- Generates distance statement
+-- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
 genDistanceStatement :: Term' -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
   [d|$(pure $ VarP distance) = $(τ ast) $(pure $ VarE input1) $(pure $ VarE input2)|]
@@ -185,24 +183,18 @@ genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName inpu
 -- Generates
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
--- TODO what if it's a 3 function argument or 1.
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q ([Dec], GeneratedDistanceName)
+genDistanceOutStatement :: Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
 genDistanceOutStatement ast functionName inputs1 inputs2 = do
-  distance <- qNewName "distanceOut"
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
       function1Application = applyInputsOnFunction inputs1
       function2Application = applyInputsOnFunction inputs2
-  statement <- case ast of
-    SDouble' Diff _ -> [d|$(pure $ VarP distance) = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SMatrix' L2 _ _ -> [d|$(pure $ VarP distance) = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+  case ast of
+    SDouble' Diff _ -> [d|dout = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
+    SMatrix' L2 _ _ -> [d|dout = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
     _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
-  pure
-    ( statement
-    , GeneratedDistanceName distance
-    )
 
 τ :: Term' -> Q Exp
 τ ast = case ast of
@@ -228,21 +220,35 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
-genPropertyStatement :: Term' -> Q Exp
-genPropertyStatement ast = [e|dout <= $(computeRhs $ getSEnv ast) + 0.00000001|]
+genPropertyStatement :: Term' -> SEnvToDistance -> Q Exp
+genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001|]
  where
-  computeRhs :: SEnv' -> Q Exp
-  computeRhs sexp = case sexp of
+  computeRhs :: SEnv' -> SEnvToDistance -> Q (Exp, SEnvToDistance)
+  computeRhs sexp senvToDistance = case sexp of
     -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
-    SEnv_ se -> [|s|]
-    Plus' se1 se2 -> [|$(computeRhs se1) + $(computeRhs se2)|]
-    ScaleSens' se1 n -> [|n * $(computeRhs se1)|]
+    se@(SEnv_ sname) -> do
+      distance <- case M.lookup se senvToDistance of
+        Nothing -> fail $ "Unable to find sensitivity environment in distance map " <> show se <> show senvToDistance
+        Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key. " <> show se <> show senvToDistance
+        Just (GeneratedDistanceName distanceName : _) -> pure distanceName
+      let newSEnvToDistance = M.update (\(_ : distances) -> Just distances) se senvToDistance
+       in pure (VarE distance, newSEnvToDistance)
+    Plus' se1 se2 -> do
+      (nextLeft, leftSenvToDistance) <- computeRhs se1 senvToDistance
+      (nextRight, rightSenvToDistance) <- computeRhs se2 leftSenvToDistance
+      nextExp <- [|$(pure nextLeft) + $(pure nextRight)|]
+      pure (nextExp, rightSenvToDistance)
+    ScaleSens' se1 n -> do
+      (nextInnerExp, nextSenvToDistance) <- computeRhs se1 senvToDistance
+      nextExp <- [|n * $(pure nextInnerExp)|]
+      pure (nextExp, nextSenvToDistance)
     _ -> undefined
-  -- Strip sensitivity environment from Type
-  -- e.g returns (s1 +++ s2) from SDouble Diff (s1 +++ s2)
-  getSEnv :: Term' -> SEnv'
-  getSEnv ast = case ast of
-    SDouble' _ se -> se
-    SMatrix' _ _ se -> se
-    SList' _ _ se -> se
-    SPair' _ _ _ se -> se
+
+-- Strip sensitivity environment from Type
+-- e.g returns (s1 +++ s2) from SDouble Diff (s1 +++ s2)
+getSEnv :: Term' -> SEnv'
+getSEnv ast = case ast of
+  SDouble' _ se -> se
+  SMatrix' _ _ se -> se
+  SList' _ _ se -> se
+  SPair' _ _ _ se -> se
