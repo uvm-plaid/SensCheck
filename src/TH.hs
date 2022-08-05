@@ -220,6 +220,9 @@ genDistanceOutStatement ast functionName inputs1 inputs2 = do
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
+-- TODO this doesn't handle distances associated to complex sensitivities such as s1 +++ s2.
+-- That is an unusual thing for someone to do but I think we could solve it by checking the map at every case for the given expression.
+-- talk to Joe Near about it
 genPropertyStatement :: Term' -> SEnvToDistance -> Q Exp
 genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001|]
  where
