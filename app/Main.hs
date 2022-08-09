@@ -12,4 +12,4 @@ $(genProp 'f)
 
 main :: IO ()
 main = do
-  putStrLn $(stringE . pprint =<< genProp 'allTypes)
+  putStrLn $(stringE . pprint =<< genProp 'f)
