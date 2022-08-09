@@ -11,7 +11,7 @@ import Control.Monad (replicateM)
 import qualified Data.Matrix as Matrix
 import Sensitivity (NMetric (Diff), SDouble (..))
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive), forAll, quickCheck, suchThat, withMaxSuccess)
-import Verifier (SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE, unSMatrix), prop_distance, prop_distance_solo, prop_safe_add, prop_safe_add_solo)
+import Verifier (SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE, unSMatrix), absdist, f, prop_distance, prop_distance_solo, prop_safe_add, prop_safe_add_solo)
 
 test_distance :: IO ()
 test_distance = quickCheck (withMaxSuccess 1000 prop_distance)

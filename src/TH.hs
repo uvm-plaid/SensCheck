@@ -81,25 +81,6 @@ genProp functionName = do
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
       <$> qNewName "input1" <*> qNewName "input2" <*> qNewName "distance"
 
--- >>> runQ [d|x :: (a,b,c); x = undefined|]
--- [SigD x_3 (AppT (AppT (AppT (TupleT 3) (VarT a_0)) (VarT b_1)) (VarT c_2)),ValD (VarP x_3) (NormalB (VarE GHC.Err.undefined)) []]
-
--- This might be the output of SDouble s1 -> SDouble s2 -> SDouble (s1 +++ s2)
--- You might notice I'm ignoring SDouble. Not sure if we really need to capture that.
--- exampleAstPlus :: [Term']
--- exampleAstPlus =
---   [ SDouble' Diff $ SEnv_ "s1"
---   , SDouble' Diff $ SEnv_ "s2"
---   , SDouble' Diff $ Plus' (SEnv_ "s1") (SEnv_ "s2")
---   ]
---
--- exampleAstDiscardS2 :: [Term']
--- exampleAstDiscardS2 =
---   [ SDouble' Diff $ SEnv_ "s1"
---   , SDouble' Diff $ SEnv_ "s2"
---   , SDouble' Diff $ SEnv_ "s1"
---   ]
-
 -- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 -- into a list of ASTs
 -- This is going to be painful
@@ -178,23 +159,26 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, O
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
 genDistanceStatement :: Term' -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
-  [d|$(pure $ VarP distance) = $(τ ast) $(pure $ VarE input1) $(pure $ VarE input2)|]
+  [d|$(pure $ VarP distance) = $(τ ast) $ $(unwrap ast) $(pure $ VarE input1) - $(unwrap ast) $(pure $ VarE input2)|]
 
 -- Generates
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
 genDistanceOutStatement :: Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
-genDistanceOutStatement ast functionName inputs1 inputs2 = do
+genDistanceOutStatement ast functionName inputs1 inputs2 =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
       function1Application = applyInputsOnFunction inputs1
       function2Application = applyInputsOnFunction inputs2
-  case ast of
-    SDouble' Diff _ -> [d|dout = abs $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    SMatrix' L2 _ _ -> [d|dout = norm_2 $ unSDouble $(pure function1Application) - unSDouble $(pure function2Application)|]
-    _ -> fail $ "Unexpected input in genDistanceStatement AST: " <> show ast
+   in [d|dout = $(τ ast) $ $(unwrap ast) $(pure function1Application) - $(unwrap ast) $(pure function2Application)|]
+
+unwrap :: Term' -> Q Exp
+unwrap ast = case ast of
+  SDouble' _ _ -> [|unSDouble|]
+  SMatrix' _ _ _ -> [|toDoubleMatrix|]
+  _ -> fail $ "Unhandled input in unwrap AST: " <> show ast
 
 τ :: Term' -> Q Exp
 τ ast = case ast of
