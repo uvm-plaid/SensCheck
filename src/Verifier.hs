@@ -93,3 +93,12 @@ prop_safe_add_solo a1 a2 b1 b2 =
 
 absdist :: Floating n => n -> n
 absdist = undefined
+
+l1dist :: Floating n => n -> n
+l1dist = undefined
+
+l2dist :: Floating n => n -> n
+l2dist = undefined
+
+diff :: Floating n => n -> n
+diff = undefined
