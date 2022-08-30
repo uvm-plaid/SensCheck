@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -45,12 +46,22 @@ type SEnvName = String
 -- I guess we could it's a weird case anyway. But allowing the representation and would rather fail late instead of early.
 type SEnvToDistance = Map SEnv' [GeneratedDistanceName]
 
+genQuickCheck :: Name -> Q [Dec]
+genQuickCheck functionName = do
+  prop <- genProp functionName
+  let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
+      testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
+      (FunD propName _) = prop
+  statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
+  pure [FunD propName [Clause [] (NormalB statement) []]]
+
+genProp :: Name -> Q Dec
 genProp functionName = do
   type_ <- reifyType functionName
   typeAsts <- parseASTs type_
 
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
-      propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generatinge
+      propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generating
       inputTypeAsts = init typeAsts -- The input types of the function in AST form
       outputTypeAst = last typeAsts -- The output of the function in AST form
 
@@ -75,7 +86,7 @@ genProp functionName = do
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2) -- TODO I think I need to actually interleave these
       body = Clause inputs (NormalB statements) []
-  pure [FunD propName [body]]
+  pure $ FunD propName [body]
  where
   genNameForInputTypes ast =
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
