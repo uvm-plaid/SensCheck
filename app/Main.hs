@@ -8,7 +8,7 @@ import TestFunctions (allTypes)
 import Verifier
 
 -- $((: []) <<= genProp 'safe_add)
-$(genProp 'f)
+$(genQuickCheck 'f)
 
 main :: IO ()
 main = do
