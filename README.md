@@ -25,6 +25,9 @@ stack test --fast
 * Add absdist diff somewhere https://github.com/uvm-plaid/pbt-sensitivity/pull/4#issuecomment-1165632399
 * How do we scan a file and then run our template haskell functions
 * Alternatively we can explicity call our genProp function. Downside: developer can forget something. Also more work for devs.
+* We decided to generate the quickcheck tests and let it fail. In the paper we will talk about how you need dependent types to make thsi work nciely.
+* That also means we should make arbitrary instances for SMatrix and SList.
+
 
 
 ## Notes July 7
