@@ -18,7 +18,6 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
 import Sensitivity
 import qualified Sensitivity
-import qualified Verifier
 
 data Term'
   = SDouble' NMetric SEnv'
@@ -133,7 +132,7 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
       -- TODO this is another special case where innerType is missing
-      if termName == ''Verifier.SMatrix || termName == ''Sensitivity.SList
+      if termName == ''Sensitivity.SMatrix || termName == ''Sensitivity.SList
         then do
           cmetric <- nameToCMetric metricName
           senv <- typeToSEnv s

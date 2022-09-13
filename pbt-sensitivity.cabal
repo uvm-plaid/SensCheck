@@ -25,6 +25,8 @@ source-repository head
 
 library
   exposed-modules:
+      AnnotatedExternalLibrary
+      DistanceFunctions
       Lib
       Primitives
       Privacy
@@ -34,10 +36,7 @@ library
       Sensitivity
       Solo2
       StdLib
-      TestFunctions
       TH
-      Verifier
-      VerifierQuickCheck
   other-modules:
       Paths_pbt_sensitivity
   hs-source-dirs:
@@ -70,6 +69,7 @@ test-suite pbt-sensitivity-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      MatrixCorrectedSpec
       Paths_pbt_sensitivity
   hs-source-dirs:
       test

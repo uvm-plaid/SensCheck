@@ -18,11 +18,15 @@
    ,RebindableSyntax
    ,EmptyCase
    #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Sensitivity where
 import Prelude hiding (return,(>>=), sum)
 import qualified Prelude as P
 import qualified GHC.TypeLits as TL
 import Data.Proxy
+import Test.QuickCheck (Arbitrary)
+import Test.QuickCheck.Arbitrary (Arbitrary(arbitrary))
+import qualified Data.Matrix as Matrix
 
 type Source = TL.Symbol                               -- sensitive data sources
 data Sensitivity = InfSens | NatSens TL.Nat           -- sensitivity values
@@ -101,3 +105,24 @@ type family JoinSens (s1 :: SEnv) (s2 :: SEnv) :: SEnv where
   JoinSens ('(o1,NatSens n1)':s1) ('(o2,NatSens n2)':s2) =
     Cond (IsLT (TL.CmpSymbol o1 o2)) ('(o1,NatSens n1) ': (JoinSens s1 ('(o2,NatSens n2)':s2)))
                                      ('(o2,NatSens n2) ': (JoinSens ('(o1,NatSens n1)':s1) s2))
+
+
+-----------------------------------------------------------------------------------------------------
+-- New code to Solo
+
+-- Similar to SList we need a custom data type
+newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}
+
+-- A Matrix of SDoubles with L2 Metrix
+type SDoubleMatrixL2 s = SMatrix L2 (SDouble Diff) s
+
+instance Arbitrary (SDouble Diff s) where
+  arbitrary = D_UNSAFE <$> arbitrary @Double
+
+-- Required for quickCheck
+instance Show (SDouble Diff '[]) where
+  show sdouble = "SDouble Diff '[] " <> show (unSDouble sdouble)
+
+instance (Show (f s)) => Show (SMatrix m f s) where
+  show smatrix = show $ unSMatrix smatrix
+

@@ -4,11 +4,10 @@ module Main where
 
 import Language.Haskell.TH
 import TH
-import TestFunctions (allTypes)
-import Verifier
+import AnnotatedExternalLibrary (f)
 
 -- $((: []) <<= genProp 'safe_add)
-$(genQuickCheck 'f)
+-- $(genQuickCheck 'f)
 
 main :: IO ()
 main = do
