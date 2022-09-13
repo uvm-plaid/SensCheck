@@ -69,18 +69,3 @@ test_add_solo =
       forAll -- Generate 4 matrixes of the same size
         (genSDL2Matrixes 4)
         (\[m1, m2, m3, m4] -> prop_safe_add_solo m1 m2 m3 m4)
-
--- I realized there's two cases that make this hard
--- First I can't just take a list of generators. The types might not align.
--- So I would need to generate a function that creates a list of arguments
--- This is an example of generating a quickcheck function that requires explict generators
--- Other problem is I want explicit for some arguments and implicit for other arguments.
--- idk how to do that.
--- Suggestion only generate the prop for non supported stuff
-test_add_solo_example :: Gen a -> Gen b -> IO ()
-test_add_solo_example gena genb =
-  quickCheck $
-    withMaxSuccess 1000 $
-      forAll -- Generate 4 matrixes of the same size
-        [genMatrix 4 8, genMatrix 4 8, genMatrix 8 15, genMatrix 8 15]
-        (\[m1, m2, m3, m4] -> prop_safe_add_solo m1 m2 m3 m4)

@@ -1,7 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module TH where
@@ -47,26 +46,20 @@ type SEnvName = String
 -- I guess we could it's a weird case anyway. But allowing the representation and would rather fail late instead of early.
 type SEnvToDistance = Map SEnv' [GeneratedDistanceName]
 
-{- | Generate a Quickcheck test or a function that creates a test given a generator.
- The latter case is if we are not able to automatically use a generator.
- For example operations on Matrixes might need matching dimensions, and in those cases the programmer needs to be explicit.
--}
 genQuickCheck :: Name -> Q [Dec]
 genQuickCheck functionName = do
-  type_ <- reifyType functionName
-  typeAsts <- parseASTs type_
-  prop <- genProp typeAsts functionName
+  prop <- genProp functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
-      inputTypeAsts = init typeAsts -- The input types of the function in AST form
-      inputsRequiringExplictGenerator = (\case SMatrix'{} -> True; _ -> False) <$> inputTypeAsts
-
   statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
   pure [FunD propName [Clause [] (NormalB statement) []]]
 
-genProp :: [Term'] -> Name -> Q Dec
-genProp typeAsts functionName = do
+genProp :: Name -> Q Dec
+genProp functionName = do
+  type_ <- reifyType functionName
+  typeAsts <- parseASTs type_
+
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generating
       inputTypeAsts = init typeAsts -- The input types of the function in AST form
