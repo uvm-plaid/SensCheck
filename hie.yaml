@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "pbt-sensitivity:lib"
+
+    - path: "./app/Main.hs"
+      component: "pbt-sensitivity:exe:pbt-sensitivity-exe"
+
+    - path: "./app/Paths_pbt_sensitivity.hs"
+      component: "pbt-sensitivity:exe:pbt-sensitivity-exe"
+
+    - path: "./test"
+      component: "pbt-sensitivity:test:pbt-sensitivity-test"
