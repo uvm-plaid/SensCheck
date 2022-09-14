@@ -133,7 +133,6 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
   typeToTerm typ = case typ of
     -- TODO last thing can be expression or SEnv'. Make a parse SEnv'. This handles SDouble s1 but not SDouble (s1 +++ s2)
     AppT (AppT (ConT termName) (PromotedT metricName)) s ->
-      -- TODO I think SList and SMatrix follow this shape?
       if termName == ''Sensitivity.SDouble
         then do
           nmetric <- nameToNMetric metricName
@@ -141,7 +140,7 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
           pure $ SDouble' nmetric senv
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
-      -- TODO this is another special case where innerType is missing
+      -- This is a special case where innerType is missing
       if termName == ''Sensitivity.SMatrix || termName == ''Sensitivity.SList
         then do
           cmetric <- nameToCMetric metricName
@@ -224,9 +223,6 @@ unwrap ast = case ast of
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
--- TODO this doesn't handle distances associated to complex sensitivities such as s1 +++ s2.
--- That is an unusual thing for someone to do but I think we could solve it by checking the map at every case for the given expression.
--- talk to Joe Near about it
 genPropertyStatement :: Term' -> SEnvToDistance -> Q Exp
 genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001|]
  where
