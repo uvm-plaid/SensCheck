@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module TH where
 
@@ -41,18 +42,29 @@ data SEnv'
 type SEnvName = String
 
 -- Given an SEnv return the associated distance statement
--- TODO We're not handling associations to complicated s values and distance names such as s1 +++ s2.
--- I guess we could it's a weird case anyway. But allowing the representation and would rather fail late instead of early.
 type SEnvToDistance = Map SEnv' [GeneratedDistanceName]
 
-genQuickCheck :: Name -> Q [Dec]
+-- Generates a quick check main function given tests
+-- Output: main :: IO ()
+genMainQuickCheck :: String -> [Name] -> Q [Dec]
+genMainQuickCheck mainName names = do
+  testsAndProps <- sequence $ genQuickCheck <$> names
+  let mainName' = mkName mainName
+      testNames = \case {FunD testName _ -> testName} . fst <$> testsAndProps
+      doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
+      testAndPropsList = concat $ tuple2ToList <$> testsAndProps
+  return $ FunD mainName' [Clause [] (NormalB doStatement) []] : testAndPropsList
+
+-- Generates a quickcheck test for a given function
+genQuickCheck :: Name -> Q (Dec, Dec)
 genQuickCheck functionName = do
   prop <- genProp functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
   statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
-  pure [FunD propName [Clause [] (NormalB statement) []]]
+  pure (FunD testName [Clause [] (NormalB statement) []], prop)
+
 
 genProp :: Name -> Q Dec
 genProp functionName = do
@@ -91,9 +103,7 @@ genProp functionName = do
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
       <$> qNewName "input1" <*> qNewName "input2" <*> qNewName "distance"
 
--- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
--- into a list of ASTs
--- This is going to be painful
+-- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> Q [Term']
 parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
  where
@@ -249,3 +259,6 @@ getSEnv ast = case ast of
   SMatrix' _ _ se -> se
   SList' _ _ se -> se
   SPair' _ _ _ se -> se
+
+tuple2ToList :: (a, a) -> [a]
+tuple2ToList (a, b) = [a, b]

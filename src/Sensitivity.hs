@@ -120,7 +120,7 @@ instance Arbitrary (SDouble Diff s) where
   arbitrary = D_UNSAFE <$> arbitrary @Double
 
 -- Required for quickCheck
-instance Show (SDouble Diff '[]) where
+instance Show (SDouble Diff s) where
   show sdouble = "SDouble Diff '[] " <> show (unSDouble sdouble)
 
 instance (Show (f s)) => Show (SMatrix m f s) where
