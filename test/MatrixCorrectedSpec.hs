@@ -5,13 +5,13 @@
 {- | Contains quickcheck tests for Verifier
  TODO this should be in the test/ directory but currently having issues with HLS
 -}
-module VerifierQuickCheckUtils where
+module MatrixCorrectedSpec where
 
 import Control.Monad (replicateM)
 import qualified Data.Matrix as Matrix
-import Sensitivity (NMetric (Diff), SDouble (..))
+import Sensitivity (NMetric (Diff), SDouble (..), SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE))
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive), forAll, quickCheck, suchThat, withMaxSuccess)
-import Verifier (SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE, unSMatrix), absdist, f, prop_distance, prop_distance_solo, prop_safe_add, prop_safe_add_solo)
+import AnnotatedExternalLibrary
 
 -----------------------------------------------------------------------------------------------------------------
 -- Below illustrates manual but correct ways to write quickcheck tests where inputs are dependent on each other
@@ -42,13 +42,16 @@ genSDL2Matrixes numMatrixes = (fmap . fmap) SMatrix_UNSAFE (genMatrixes numMatri
 
 -- Examples of proper quickcheck tests
 -- The automatically generated ones 
-test_add :: IO ()
-test_add =
-  quickCheck $
-    withMaxSuccess 1000 $
-      forAll -- Generate 4 matrixes of the same size
-        (genMatrixes 4)
-        (\[m1, m2, m3, m4] -> prop_safe_add m1 m2 m3 m4)
+-- test_add :: IO ()
+-- test_add =
+--   quickCheck $
+--     withMaxSuccess 1000 $
+--       forAll -- Generate 4 matrixes of the same size
+--         (genMatrixes 4)
+--         (\[m1, m2, m3, m4] -> prop_safe_add m1 m2 m3 m4)
+
+-- prop_safe_add :: Matrix.Matrix a0 -> Matrix.Matrix a0 -> Matrix.Matrix a0 -> Matrix.Matrix a0 -> prop1
+-- prop_safe_add = undefined
 
 test_add_solo :: IO ()
 test_add_solo =
