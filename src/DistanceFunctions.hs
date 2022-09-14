@@ -8,14 +8,18 @@ norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
 
 -- TODO L1 https://programming-dp.com/notebooks/ch6.html#vector-valued-functions-and-their-sensitivities
 
+-- TODO verify these with Joe
+
+
 absdist :: Floating n => n -> n
-absdist = undefined
+absdist x = abs x
 
-l1dist :: Floating n => n -> n
-l1dist = undefined
+l1dist :: (Traversable f, Floating n) => f n -> n
+l1dist = sum
 
-l2dist :: Floating n => n -> n
-l2dist = undefined
+l2dist :: (Traversable f, Floating n) => f n -> n
+l2dist n = sqrt $ foldl (\acc x -> x**2 + acc) 0 n
+
 
 diff :: Floating n => n -> n
 diff = undefined
