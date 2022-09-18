@@ -19,6 +19,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
 import Sensitivity
 import qualified Sensitivity
+import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
 
 data Term'
   = SDouble' NMetric SEnv'
@@ -68,7 +69,7 @@ genQuickCheck functionName = do
 
 genProp :: Name -> Q Dec
 genProp functionName = do
-  type_ <- reifyType functionName
+  type_ <- reifyType functionName >>= resolveTypeSynonyms
   typeAsts <- parseASTs type_
 
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
