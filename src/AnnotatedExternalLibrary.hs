@@ -12,6 +12,7 @@ import qualified Data.Matrix as Matrix
 import Debug.Trace (trace)
 import Sensitivity (CMetric (..), NMetric (Diff), SDouble (..), SEnv, type (+++), SDoubleMatrixL2, SMatrix (unSMatrix, SMatrix_UNSAFE))
 import DistanceFunctions
+import Utils
 
 -- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
 -- Also includes examples of manually generated props
@@ -64,8 +65,6 @@ add_matrix_solo m1 m2 =
     D_UNSAFE
       <$> (unSDouble <$> unSMatrix m1) + (unSDouble <$> unSMatrix m2)
 
-toDoubleMatrix :: SMatrix m1 (SDouble m2) s -> Matrix.Matrix Double
-toDoubleMatrix m = unSDouble <$> unSMatrix m
 
 prop_safe_add_solo ::
   SDoubleMatrixL2 '[] ->

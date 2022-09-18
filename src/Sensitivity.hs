@@ -19,14 +19,17 @@
    ,EmptyCase
    #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 module Sensitivity where
-import Prelude hiding (return,(>>=), sum)
+import Prelude 
 import qualified Prelude as P
 import qualified GHC.TypeLits as TL
 import Data.Proxy
-import Test.QuickCheck (Arbitrary)
+import Test.QuickCheck (Arbitrary, Positive (Positive))
 import Test.QuickCheck.Arbitrary (Arbitrary(arbitrary))
 import qualified Data.Matrix as Matrix
+import Test.QuickCheck.Modifiers (Positive)
+import Control.Monad (replicateM)
 
 type Source = TL.Symbol                               -- sensitive data sources
 data Sensitivity = InfSens | NatSens TL.Nat           -- sensitivity values
@@ -116,13 +119,24 @@ newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {un
 -- A Matrix of SDoubles with L2 Metrix
 type SDoubleMatrixL2 s = SMatrix L2 (SDouble Diff) s
 
-instance Arbitrary (SDouble Diff s) where
-  arbitrary = D_UNSAFE <$> arbitrary @Double
+instance (Show (f s)) => Show (SMatrix m f s) where
+  show smatrix = show $ unSMatrix smatrix
+
+instance (forall senv. Arbitrary (innerType senv)) => Arbitrary (SMatrix cmetric innerType s1) where
+  arbitrary = do
+    -- Generate an arbitrary number of rows and columns greater than 0
+    (Positive row) <- arbitrary @(Positive Int)
+    (Positive col) <- arbitrary @(Positive Int)
+      -- Generate a list of arbitrary elements of size row * col
+    elems <- replicateM (row * col) arbitrary
+    -- Convert to Matrix
+    pure $ SMatrix_UNSAFE $ Matrix.fromList row col elems
 
 -- Required for quickCheck
 instance Show (SDouble Diff s) where
   show sdouble = "SDouble Diff '[] " <> show (unSDouble sdouble)
 
-instance (Show (f s)) => Show (SMatrix m f s) where
-  show smatrix = show $ unSMatrix smatrix
+instance Arbitrary (SDouble Diff s) where
+  arbitrary = D_UNSAFE <$> arbitrary @Double
+
 
