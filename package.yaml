@@ -25,6 +25,7 @@ dependencies:
 - QuickCheck
 - matrix
 - template-haskell
+- th-abstraction
 
 library:
   source-dirs: src

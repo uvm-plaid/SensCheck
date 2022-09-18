@@ -6,4 +6,4 @@ import TH
 
 main :: IO ()
 main = do
-  print "I don't do anything :)"
+  print "I don't do anything :). Run stack test instead."
