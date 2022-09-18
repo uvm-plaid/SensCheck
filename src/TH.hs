@@ -9,7 +9,7 @@ module TH where
 import Control.Monad (unless, zipWithM)
 import Data.Coerce (coerce)
 import Data.List (isInfixOf, transpose)
-import Data.Map
+import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Traversable (for)
 import Debug.Trace (trace)
@@ -18,6 +18,7 @@ import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
 import Sensitivity
+    ( SMatrix, SList, CMetric(..), SDouble(unSDouble), NMetric(..) )
 import qualified Sensitivity
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
 
@@ -86,13 +87,14 @@ genProp functionName = do
       generatedNamesForInputType
 
   let senvToDistance :: SEnvToDistance
-      senvToDistance = fromListWith (++) $ (\(term, _, _, distanceName) -> (getSEnv term, [distanceName])) <$> generatedNamesForInputType
+      senvToDistance = M.fromListWith (++) $ (\(term, _, _, distanceName) -> (getSEnv term, [distanceName])) <$> generatedNamesForInputType
 
       -- Create the distance out statement.
       -- Gather all the arguments to the first call to F and all the arguments for the second call to F
       inputs1 = (\(_, input1, _, _) -> input1) <$> generatedNamesForInputType
       inputs2 = (\(_, _, input2, _) -> input2) <$> generatedNamesForInputType
-  distanceOutStatement <- genDistanceOutStatement outputTypeAst functionName inputs1 inputs2
+      
+  distanceOutStatement <- genDistanceOutStatement  outputTypeAst functionName inputs1 inputs2
 
   propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
@@ -132,7 +134,6 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
     | otherwise = fail $ "Unhandled binary op" <> show name
   typeToTerm :: Type -> Q Term'
   typeToTerm typ = case typ of
-    -- TODO last thing can be expression or SEnv'. Make a parse SEnv'. This handles SDouble s1 but not SDouble (s1 +++ s2)
     AppT (AppT (ConT termName) (PromotedT metricName)) s ->
       if termName == ''Sensitivity.SDouble
         then do
@@ -179,26 +180,44 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, O
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
 genDistanceStatement :: Term' -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
-  [d|$(pure $ VarP distance) = $(τ ast) $ $(unwrap ast) $(pure $ VarE input1) - $(unwrap ast) $(pure $ VarE input2)|]
+  [d|$(pure $ VarP distance) = $(genCalcDistance ast (VarE input1) (VarE input2))|]
 
 -- Generates
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
+genDistanceOutStatement ::  Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
 genDistanceOutStatement ast functionName inputs1 inputs2 =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
       function1Application = applyInputsOnFunction inputs1
       function2Application = applyInputsOnFunction inputs2
-   in [d|dout = $(τ ast) $ $(unwrap ast) $(pure function1Application) - $(unwrap ast) $(pure function2Application)|]
+   in [d|dout = $(genCalcDistance ast function1Application function2Application)|]
 
-unwrap :: Term' -> Q Exp
-unwrap ast = case ast of
-  SDouble' _ _ -> [|unSDouble|]
-  SMatrix' _ _ _ -> [|toDoubleMatrix|]
-  _ -> fail $ "Unhandled input in unwrap AST: " <> show ast
+
+genCalcDistance :: Term' -> Exp -> Exp -> Q Exp
+genCalcDistance ast exp1 exp2 = case ast of
+  SDouble' Diff _ -> [e|absdist $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2)|]
+  SDouble' Disc _ -> [e|diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2)|]
+  SMatrix' cmetric innerType senv -> genInnerType cmetric innerType senv
+  SList' cmetric innerType senv -> genInnerType cmetric innerType senv
+  _ -> fail $ "Unexpected input in τ AST: " <> show ast
+  where
+    genInnerType :: CMetric -> (SEnv' -> Term') -> SEnv' -> Q Exp
+    genInnerType cmetric innerType senv = 
+      let appliedInnerType = innerType senv
+      in case (cmetric, appliedInnerType) of
+            (L2, SDouble' Diff _) -> [|l2dist $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+            (L1, SDouble' Diff _) -> [|l1dist $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+            (L2, SDouble' Disc _) -> [|l2dist . diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+            (L1, SDouble' Disc _) -> [|l1dist . diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+    unwrap :: Term' -> Q Exp
+    unwrap ast = case ast of
+      SDouble' _ _ -> [e|unSDouble|]
+      SMatrix' _ _ _ -> [e|toDoubleMatrix|]
+      _ -> fail $ "Unhandled input in unwrap AST: " <> show ast
+
 
 τ :: Term' -> Q Exp
 τ ast = case ast of
@@ -257,5 +276,6 @@ getSEnv ast = case ast of
   SList' _ _ se -> se
   SPair' _ _ _ se -> se
 
+-- Pair of tuple of same type to a list of 2 elements.
 tuple2ToList :: (a, a) -> [a]
 tuple2ToList (a, b) = [a, b]

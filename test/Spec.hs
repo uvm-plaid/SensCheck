@@ -4,6 +4,8 @@ import AnnotatedExternalLibrary (external_function, add_matrix_solo)
 import TH (genMainQuickCheck)
 import DistanceFunctions
 import Utils
+import Sensitivity
+
 
 $(genMainQuickCheck "tests" ['external_function, 'add_matrix_solo])
 
