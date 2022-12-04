@@ -130,6 +130,7 @@ Unstructured notes
 * Alternatively we can explicity call our genProp function. Downside: developer can forget something. Also more work for devs.
 * We decided to generate the quickcheck tests and let it fail. In the paper we will talk about how you need dependent types to make thsi work nciely.
 * That also means we should make arbitrary instances for SMatrix and SList.
+* Write dependently typed Matrix 
 
 
 

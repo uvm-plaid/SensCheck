@@ -5,9 +5,13 @@ import TH (genMainQuickCheck)
 import DistanceFunctions
 import Utils
 import Sensitivity
+import MatrixCorrectedSpec (test_add_matrix_solo_corrected)
 
 
-$(genMainQuickCheck "tests" ['external_function, 'add_matrix_solo])
+$(genMainQuickCheck "generated_tests" ['external_function, 'add_matrix_solo])
 
 main :: IO ()
-main = tests
+main = do
+    generated_tests
+    putStrLn "hiiiiiiiiii"
+    test_add_matrix_solo_corrected

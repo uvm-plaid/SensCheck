@@ -73,6 +73,7 @@ test-suite pbt-sensitivity-test
   main-is: Spec.hs
   other-modules:
       MatrixCorrectedSpec
+      MatrixProp
       Paths_pbt_sensitivity
   hs-source-dirs:
       test

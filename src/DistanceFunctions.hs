@@ -23,3 +23,7 @@ l2dist n = sqrt $ foldl (\acc x -> x**2 + acc) 0 n
 
 diff :: Floating n => n -> n
 diff = undefined
+
+-- Maximum element
+max :: (Traversable f, Floating n) => f n -> n
+max n = undefined

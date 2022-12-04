@@ -18,6 +18,7 @@ import Utils
 -- Also includes examples of manually generated props
 
 -- This is a function from an external library for example hmatrix
+-- TODO rename to unsafe_plus
 unsafe_function :: Double -> Double -> Double
 unsafe_function a b = a + b
 
@@ -30,10 +31,12 @@ unsafe_unsafe_external_function_prop x1 y1 x2 y2 =
    in dout <= d1 + d2
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
+-- TODO rename to sensitive_plus or s_plus
 external_function :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 external_function a b = D_UNSAFE $ unsafe_function (unSDouble a) (unSDouble b)
 
-external_function_prop :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
+-- This is an example of a manually written quickcheck property. This project will generate this automatically.
+external_function_prop :: SDouble Diff senv -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 external_function_prop a1 a2 b1 b2 =
   let d1 = abs $ unSDouble a1 - unSDouble a2
       d2 = abs $ unSDouble b1 - unSDouble b2

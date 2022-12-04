@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {- | Contains quickcheck tests for Verifier
  TODO this should be in the test/ directory but currently having issues with HLS
@@ -12,6 +13,9 @@ import qualified Data.Matrix as Matrix
 import Sensitivity (NMetric (Diff), SDouble (..), SDoubleMatrixL2, SMatrix (SMatrix_UNSAFE))
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive), forAll, quickCheck, suchThat, withMaxSuccess)
 import AnnotatedExternalLibrary
+import TH (genProp)
+import DistanceFunctions
+import Utils
 
 -----------------------------------------------------------------------------------------------------------------
 -- Below illustrates manual but correct ways to write quickcheck tests where inputs are dependent on each other
@@ -53,10 +57,15 @@ genSDL2Matrixes numMatrixes = (fmap . fmap) SMatrix_UNSAFE (genMatrixes numMatri
 -- prop_safe_add :: Matrix.Matrix a0 -> Matrix.Matrix a0 -> Matrix.Matrix a0 -> Matrix.Matrix a0 -> prop1
 -- prop_safe_add = undefined
 
-test_add_solo :: IO ()
-test_add_solo =
+-- Automatically generated prop 
+$(pure <$> genProp 'add_matrix_solo)
+
+-- Corrected test that still uses automatically generated props
+-- Note: This can be automatically generated with dependently typed matrixes
+test_add_matrix_solo_corrected :: IO ()
+test_add_matrix_solo_corrected =
   quickCheck $
     withMaxSuccess 1000 $
       forAll -- Generate 4 matrixes of the same size
         (genSDL2Matrixes 4)
-        (\[m1, m2, m3, m4] -> prop_safe_add_solo m1 m2 m3 m4)
+        (\[m1, m2, m3, m4] -> add_matrix_solo_prop m1 m2 m3 m4)

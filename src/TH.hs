@@ -53,9 +53,14 @@ genMainQuickCheck mainName names = do
   testsAndProps <- sequence $ genQuickCheck <$> names
   let mainName' = mkName mainName
       testNames = \case {FunD testName _ -> testName} . fst <$> testsAndProps
-      doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
+  x <- concat <$> sequence ((\testName -> 
+    let testNameStr = show testName in sequence [
+      NoBindS <$> [e| putStrLn $ "Testing" <> testNameStr|] , -- Print name of test
+      pure $ NoBindS $ VarE testName
+    ]) <$> testNames)
+  let runTestExp = DoE Nothing x
       testAndPropsList = concat $ tuple2ToList <$> testsAndProps
-  return $ FunD mainName' [Clause [] (NormalB doStatement) []] : testAndPropsList
+  return $ FunD mainName' [Clause [] (NormalB runTestExp) []] : testAndPropsList
 
 -- Generates a quickcheck test for a given function
 genQuickCheck :: Name -> Q (Dec, Dec)
@@ -93,7 +98,7 @@ genProp functionName = do
       -- Gather all the arguments to the first call to F and all the arguments for the second call to F
       inputs1 = (\(_, input1, _, _) -> input1) <$> generatedNamesForInputType
       inputs2 = (\(_, _, input2, _) -> input2) <$> generatedNamesForInputType
-      
+
   distanceOutStatement <- genDistanceOutStatement  outputTypeAst functionName inputs1 inputs2
 
   propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
@@ -143,7 +148,7 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
       -- This is a special case where innerType is missing
-      if termName == ''Sensitivity.SMatrix || termName == ''Sensitivity.SList
+      if termName == ''Sensitivity.SMatrix || termName == ''Sensitivity.SList -- TODO list is not handled here
         then do
           cmetric <- nameToCMetric metricName
           senv <- typeToSEnv s
@@ -204,40 +209,22 @@ genCalcDistance ast exp1 exp2 = case ast of
   SList' cmetric innerType senv -> genInnerType cmetric innerType senv
   _ -> fail $ "Unexpected input in τ AST: " <> show ast
   where
+    -- In a matrix or list
     genInnerType :: CMetric -> (SEnv' -> Term') -> SEnv' -> Q Exp
-    genInnerType cmetric innerType senv = 
+    genInnerType cmetric innerType senv =
       let appliedInnerType = innerType senv
       in case (cmetric, appliedInnerType) of
             (L2, SDouble' Diff _) -> [|l2dist $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
             (L1, SDouble' Diff _) -> [|l1dist $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
             (L2, SDouble' Disc _) -> [|l2dist . diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
             (L1, SDouble' Disc _) -> [|l1dist . diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+            (LInf, SDouble' Disc _) -> [|max . diff $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
+            (LInf, SDouble' Diff _) -> [|max $ $(unwrap ast) $(pure exp1) - $(unwrap ast) $(pure exp2) |]
     unwrap :: Term' -> Q Exp
     unwrap ast = case ast of
       SDouble' _ _ -> [e|unSDouble|]
       SMatrix' _ _ _ -> [e|toDoubleMatrix|]
       _ -> fail $ "Unhandled input in unwrap AST: " <> show ast
-
-
-τ :: Term' -> Q Exp
-τ ast = case ast of
-  SDouble' Diff _ -> [|absdist|]
-  SDouble' Disc _ -> [|diff|]
-  SMatrix' cmetric innerType senv ->
-    let appliedInnerType = innerType senv
-     in case (cmetric, appliedInnerType) of
-          (L2, SDouble' Diff _) -> [|l2dist|]
-          (L1, SDouble' Diff _) -> [|l1dist|]
-          (L2, SDouble' Disc _) -> [|l2dist . diff|]
-          (L1, SDouble' Disc _) -> [|l1dist . diff|]
-  SList' cmetric innerType senv ->
-    let appliedInnerType = innerType senv
-     in case (cmetric, appliedInnerType) of
-          (L2, SDouble' Diff _) -> [|l2dist|]
-          (L1, SDouble' Diff _) -> [|l1dist|]
-          (L2, SDouble' Disc _) -> [|l2dist . diff|]
-          (L1, SDouble' Disc _) -> [|l1dist . diff|]
-  _ -> fail $ "Unexpected input in τ AST: " <> show ast
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
