@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 
 module TH where
 
@@ -21,6 +22,8 @@ import Sensitivity
     ( SMatrix, SList, CMetric(..), SDouble(unSDouble), NMetric(..) )
 import qualified Sensitivity
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
+import qualified TestTypeclass
+import Data.Proxy (Proxy (..))
 
 data Term'
   = SDouble' NMetric SEnv'
@@ -106,7 +109,43 @@ genProp functionName = do
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
       <$> qNewName "input1" <*> qNewName "input2" <*> qNewName "distance"
 
--- Parses SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
+-- TODO maybe I can provide a simplified AST to generate instead of the user supplying TH? Optional
+-- TODO I don't see how I can actually call generate at runtime
+-- This might be super hacky but maybe I can call reifyInstances call runQ on that function
+-- class GenQCProp a where
+--   generate :: proxy a -> Q Exp
+
+-- instance GenQCProp (SMatrix a b c) where
+--   generate _ = undefined
+
+-- TODO try Joe's thing without a proxy and see if it works
+
+class Distance a where
+  distance :: a -> a -> Double
+
+listType = ''[]
+
+-- TODO try a list ''[]
+
+intType = ''Integer
+
+test = testHelper intType
+
+testHelper :: Name -> Q ()
+testHelper typeName = do -- typeName = SMatrix L2 ...
+  let willusethislater = $(litE $ StringL $ TestTypeclass.tcmember (Proxy @$typeName)) 
+  trace ("willusethislater: " <> show willusethislater) $ pure ()
+  pure undefined
+
+-- TODO this might be helpful but maybe not really tbh
+-- [InstanceD _ _ (AppT _ (ConT typename)) []] <- reifyInstances className [ConT typeName] -- TODO handle failure case
+
+-- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE { unSList :: [f s] }
+instance GenQCProp (SList cmetric innerType senv) where
+  generate = undefined
+
+-- Parses Template Haskell AST to a list of simplified ASTs
+-- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> Q [Term']
 parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
  where
