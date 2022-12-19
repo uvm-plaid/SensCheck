@@ -118,10 +118,6 @@ genProp functionName = do
 -- instance GenQCProp (SMatrix a b c) where
 --   generate _ = undefined
 
--- TODO try Joe's thing without a proxy and see if it works
-
-class Distance a where
-  distance :: a -> a -> Double
 
 listType = ''[]
 
@@ -133,7 +129,7 @@ test = testHelper intType
 
 testHelper :: Name -> Q ()
 testHelper typeName = do -- typeName = SMatrix L2 ...
-  let willusethislater = $(litE $ StringL $ TestTypeclass.tcmember (Proxy @$typeName)) 
+  let willusethislater = $(litE $ StringL $ TestTypeclass.distance 2 5) 
   trace ("willusethislater: " <> show willusethislater) $ pure ()
   pure undefined
 
