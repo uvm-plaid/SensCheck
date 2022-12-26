@@ -33,6 +33,10 @@ unsafe_unsafe_plus_prop x1 y1 x2 y2 =
 solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 solo_plus a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
 
+-- This is a "developer" who's reexposed but implemented incorrectly.
+solo_plus_incorrect :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff s1
+solo_plus_incorrect a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
+
 solo_plus_prop :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 solo_plus_prop a1 a2 b1 b2 =
   let d1 = abs $ unSDouble a1 - unSDouble a2
