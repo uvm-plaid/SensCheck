@@ -4,7 +4,7 @@
 module Distance where
 
 import DistanceFunctions
-import Sensitivity (CMetric (..), NMetric (..), SDouble, SList, SMatrix, unSDouble)
+import Sensitivity (CMetric (..), NMetric (..), SDouble, SList (unSList), SMatrix, unSDouble)
 import Utils (toDoubleMatrix)
 
 class Distance a where
@@ -17,22 +17,22 @@ instance Distance Integer where
   distance a b = 3
 
 instance Distance (SDouble Diff s) where
-  distance a b = absdist (unSDouble a) - absdist (unSDouble b)
+  distance a b = absdist (unSDouble a) (unSDouble b)
 
 instance Distance (SDouble Disc s) where
-  distance a b = 4
+  distance a b = undefined
 
-instance Distance (SList L2 i s) where
-  distance a b = 4
+instance () => Distance (SList L2 (SDouble Diff) s) where
+  distance a b = l2dist (unSDouble <$> unSList a) - l2dist (unSDouble <$> unSList b)
 
 instance Distance (SList L1 i s) where
-  distance a b = 4
+  distance a b = undefined
 
 instance Distance (SMatrix L2 (SDouble Diff) s) where
   distance a b = l2dist (toDoubleMatrix a) - l2dist (toDoubleMatrix b)
 
 instance Distance (SMatrix L1 i s) where
-  distance a b = 4
+  distance a b = undefined
 
--- TODO rest of them
--- Can we avoid defin
+-- TODO more instances.
+-- TODO could better compose these typeclasses together better
