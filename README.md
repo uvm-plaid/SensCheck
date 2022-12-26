@@ -1,5 +1,21 @@
 # solo-verify
 
+This branch traces dout and the dout with a unique string and finds that they are the same.
+
+What am I talking about?
+Well for some reason template haskell adds a random string after I declare dout.
+
+This is what is output when I use dump slice:
+```haskell
+          dout_a3my -- This should just be dout
+            = (l2dist
+                 $ (toDoubleMatrix ((add_matrix_solo x1) x2)
+                      - toDoubleMatrix ((add_matrix_solo y1) y2)))
+        in (dout <= ((distance_a3mu + distance_a3mx) + 1.0e-8)) -- This should not even compile since dout DNE.
+```
+I suspected that maybe I'm not getting accurate generated code, and that dout_a3my is still dout.
+I traced both results and found that they are always equal for good measure.
+
 ## Short description
 This is a library to verify that a Solo annotation is correct.
 

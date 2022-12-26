@@ -29,7 +29,6 @@ import Sensitivity (
   SMatrix,
  )
 import qualified Sensitivity
-import qualified TestTypeclass
 
 data Term'
   = SDouble' NMetric SEnv'
@@ -104,6 +103,7 @@ genProp functionName = do
   distanceOutStatement <- genDistanceOutStatement outputTypeAst functionName inputs1 inputs2
 
   propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
+
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2)
       body = Clause inputs (NormalB statements) []
@@ -201,14 +201,22 @@ genDistanceOutStatement ast functionName inputs1 inputs2 =
       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
       function1Applied = applyInputsOnFunction inputs1
       function2Applied = applyInputsOnFunction inputs2
-   in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
+   in [d|
+        dout_temp = Distance.distance $(pure function1Applied) $(pure function2Applied)
+
+        dout = trace ("dout with random string: " <> show dout_temp) dout_temp
+        |]
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: Term' -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001|]
+genPropertyStatement ast senvToDistance =
+  [e|
+    trace ("dout: " <> show dout) $
+      dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001 + 10
+    |]
  where
   computeRhs :: SEnv' -> SEnvToDistance -> Q (Exp, SEnvToDistance)
   computeRhs sexp senvToDistance = case sexp of
