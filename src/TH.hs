@@ -30,19 +30,13 @@ import Sensitivity (
  )
 import qualified Sensitivity
 
-data Term'
-  = SDouble' NMetric SEnv'
-  | SContainer' CMetric (SEnv' -> Term') SEnv'
-  | SPair' CMetric (SEnv' -> Term') (SEnv' -> Term') SEnv'
-  deriving (Show)
+instance Show (SensitiveType -> SensitiveType) where
+  show f = "SensitiveType -> SensitiveType"
 
-instance Show (SEnv' -> Term') where
-  show f = "SEnv' -> Term'"
-
-data SEnv'
+data SensitiveType
   = SEnv_ Name -- Terminal Sensitivity Environment
-  | Plus' SEnv' SEnv' -- +++
-  | ScaleSens' SEnv' Int
+  | Plus' SensitiveType SensitiveType -- +++
+  | ScaleSens' SensitiveType Int
   | TruncateSens'
   deriving (Show, Eq, Ord)
 
@@ -51,7 +45,7 @@ data SEnv'
 type SEnvName = String
 
 -- Given an SEnv return the associated distance statement
-type SEnvToDistance = Map SEnv' [GeneratedDistanceName]
+type SEnvToDistance = Map SensitiveType [GeneratedDistanceName]
 
 -- Generates a quick check main function given tests
 -- Output: main :: IO ()
@@ -93,7 +87,7 @@ genProp functionName = do
       generatedNamesForInputType
 
   let senvToDistance :: SEnvToDistance
-      senvToDistance = M.fromListWith (++) $ (\(term, _, _, distanceName) -> (getSEnv term, [distanceName])) <$> generatedNamesForInputType
+      senvToDistance = M.fromListWith (++) $ (\(term, _, _, distanceName) -> (term, [distanceName])) <$> generatedNamesForInputType
 
       -- Create the distance out statement.
       -- Gather all the arguments to the first call to F and all the arguments for the second call to F
@@ -114,7 +108,7 @@ genProp functionName = do
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
-parseASTs :: Type -> Q [Term']
+parseASTs :: Type -> Q [SensitiveType]
 parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
  where
   -- Remove Forall if found
@@ -126,7 +120,7 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
   splitArgs typ = case typ of
     AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
     t -> [t]
-  typeToSEnv :: Type -> Q SEnv'
+  typeToSEnv :: Type -> Q SensitiveType
   typeToSEnv typ = case typ of
     (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
     AppT (AppT (ConT binaryOp) t1) t2 -> do
@@ -135,26 +129,22 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
       term2 <- typeToSEnv t2
       pure $ binaryOp term1 term2
     _ -> fail $ "typeToSEnv unhandled case " <> show typ
-  nameToBinaryOp :: Name -> Q (SEnv' -> SEnv' -> SEnv')
+  nameToBinaryOp :: Name -> Q (SensitiveType -> SensitiveType -> SensitiveType)
   nameToBinaryOp name
     | isInfixOf "+++" $ show name = pure Plus'
     | otherwise = fail $ "Unhandled binary op" <> show name
-  typeToTerm :: Type -> Q Term'
+  typeToTerm :: Type -> Q SensitiveType
   typeToTerm typ = case typ of
     AppT (AppT (ConT termName) (PromotedT metricName)) s ->
       if termName == ''Sensitivity.SDouble
-        then do
-          senv <- typeToSEnv s
-          pure $ SDouble' senv
+        then typeToSEnv s
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
       -- Container like type
       -- TODO This was the case where we handled List and Matrix
       -- It might be that a user might define something that doesn't have this shape
-      -- I think we can make this
-      do
-        senv <- typeToSEnv s
-        pure $ SContainer' senv
+      -- I think we can potentially make this parsing use a typeclass with a default instance
+      typeToSEnv s
     _ -> fail $ "typeToTerm main unhandled case" <> show typ
 
 -- Represents generated Arguments
@@ -163,7 +153,7 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, O
 
 -- Generates distance statement
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
-genDistanceStatement :: Term' -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
+genDistanceStatement :: SensitiveType -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
   [d|$(pure $ VarP distance) = Distance.distance $(pure $ VarE input1) $(pure $ VarE input2)|]
 
@@ -171,7 +161,7 @@ genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName inpu
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Term' -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
+genDistanceOutStatement :: SensitiveType -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
 genDistanceOutStatement ast functionName inputs1 inputs2 =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
@@ -184,10 +174,10 @@ genDistanceOutStatement ast functionName inputs1 inputs2 =
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
-genPropertyStatement :: Term' -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSEnv ast) senvToDistance) + 0.00000001|]
+genPropertyStatement :: SensitiveType -> SEnvToDistance -> Q Exp
+genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs ast senvToDistance) + 0.00000001|]
  where
-  computeRhs :: SEnv' -> SEnvToDistance -> Q (Exp, SEnvToDistance)
+  computeRhs :: SensitiveType -> SEnvToDistance -> Q (Exp, SEnvToDistance)
   computeRhs sexp senvToDistance = case sexp of
     -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
     se@(SEnv_ sname) -> do
@@ -207,14 +197,6 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSE
       nextExp <- [|n * $(pure nextInnerExp)|]
       pure (nextExp, nextSenvToDistance)
     _ -> undefined
-
--- Strip sensitivity environment from Type
--- e.g returns (s1 +++ s2) from SDouble Diff (s1 +++ s2)
-getSEnv :: Term' -> SEnv'
-getSEnv ast = case ast of
-  SDouble' se -> se
-  SContainer' se -> se
-  SPair' se -> se
 
 -- Pair of tuple of same type to a list of 2 elements.
 tuple2ToList :: (a, a) -> [a]
