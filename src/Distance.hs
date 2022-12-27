@@ -10,12 +10,6 @@ import Utils (toDoubleMatrix)
 class Distance a where
   distance :: a -> a -> Double
 
-instance Distance [i] where
-  distance a b = 3
-
-instance Distance Integer where
-  distance a b = 3
-
 instance Distance (SDouble Diff s) where
   distance a b = absdist (unSDouble a) (unSDouble b)
 
