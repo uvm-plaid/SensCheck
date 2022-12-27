@@ -29,7 +29,6 @@ import Sensitivity (
   SMatrix,
  )
 import qualified Sensitivity
-import qualified TestTypeclass
 
 data Term'
   = SDouble' NMetric SEnv'
@@ -145,40 +144,18 @@ parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
     AppT (AppT (ConT termName) (PromotedT metricName)) s ->
       if termName == ''Sensitivity.SDouble
         then do
-          nmetric <- nameToNMetric metricName
           senv <- typeToSEnv s
-          pure $ SDouble' nmetric senv
+          pure $ SDouble' senv
         else fail $ "typeToTerm 2 unhandled case" ++ show termName
     AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
       -- Container like type
       -- TODO This was the case where we handled List and Matrix
       -- It might be that a user might define something that doesn't have this shape
-      -- How do we make this more flexible?
+      -- I think we can make this
       do
-        cmetric <- nameToCMetric metricName
         senv <- typeToSEnv s
-        -- innerType should be turned into an SEnv -> Term. This applies the outer s environment to use parser logic.
-        let innerTypeApplied = AppT innerType s
-        innerTerm <- typeToTerm innerTypeApplied
-        pure $ SContainer' cmetric (stripSEnvApp innerTerm) senv
+        pure $ SContainer' senv
     _ -> fail $ "typeToTerm main unhandled case" <> show typ
-  -- This removes a senvironment temporary added to use same parsing logic that should be stripped again
-  stripSEnvApp :: Term' -> (SEnv' -> Term')
-  stripSEnvApp typ = case typ of
-    SDouble' c _ -> SDouble' c
-    SContainer' c i _ -> SContainer' c i
-    SPair' c i1 i2 _ -> SPair' c i1 i2
-  nameToCMetric :: Name -> Q CMetric
-  nameToCMetric name
-    | name == 'Sensitivity.L1 = pure L1
-    | name == 'Sensitivity.L2 = pure L2
-    | name == 'Sensitivity.LInf = pure LInf
-    | otherwise = fail $ "Unhandled CMetric" <> show name
-  nameToNMetric :: Name -> Q NMetric
-  nameToNMetric name
-    | name == 'Sensitivity.Diff = pure Diff
-    | name == 'Sensitivity.Disc = pure Disc
-    | otherwise = fail $ "Unhandled NMetric" <> show name
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
@@ -235,9 +212,9 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs (getSE
 -- e.g returns (s1 +++ s2) from SDouble Diff (s1 +++ s2)
 getSEnv :: Term' -> SEnv'
 getSEnv ast = case ast of
-  SDouble' _ se -> se
-  SContainer' _ _ se -> se
-  SPair' _ _ _ se -> se
+  SDouble' se -> se
+  SContainer' se -> se
+  SPair' se -> se
 
 -- Pair of tuple of same type to a list of 2 elements.
 tuple2ToList :: (a, a) -> [a]

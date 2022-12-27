@@ -37,7 +37,6 @@ library
       Sensitivity
       Solo2
       StdLib
-      TestTypeclass
       TH
       Utils
   other-modules:
