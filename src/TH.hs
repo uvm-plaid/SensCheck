@@ -16,7 +16,6 @@ import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
 import Debug.Trace (trace)
 import qualified Distance
-import GHC.Base (Nat)
 import qualified GHC.Num
 import Language.Haskell.TH
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)

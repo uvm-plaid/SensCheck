@@ -16,7 +16,7 @@ instance Distance (SDouble Diff s) where
 instance Distance (SDouble Disc s) where
   distance a b = undefined
 
-instance () => Distance (SList L2 (SDouble Diff) s) where
+instance Distance (SList L2 (SDouble Diff) s) where
   distance a b = l2dist (unSDouble <$> unSList a) - l2dist (unSDouble <$> unSList b)
 
 instance Distance (SList L1 i s) where

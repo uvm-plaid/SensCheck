@@ -80,3 +80,4 @@ prop_safe_add_solo a1 a2 b1 b2 =
       -- L2 distance between two outputs
       dout = norm_2 $ toDoubleMatrix (add_matrix_solo a1 b1) - toDoubleMatrix (add_matrix_solo a2 b2)
    in dout <= d1 + d2 + 0.000000001
+
