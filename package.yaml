@@ -27,6 +27,11 @@ dependencies:
 - template-haskell
 - th-abstraction
 
+default-extensions:
+- ImportQualifiedPost
+- TypeApplications
+- LambdaCase
+
 library:
   source-dirs: src
 
