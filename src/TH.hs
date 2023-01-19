@@ -1,22 +1,21 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
 
 module TH where
 
-import Control.Monad (unless, zipWithM)
+import Control.Monad (unless, zipWithM, (>=>))
 import Data.Coerce (coerce)
 import Data.List (isInfixOf, transpose)
 import Data.Map (Map)
-import qualified Data.Map as M
+import Data.Map qualified as M
 import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
 import Debug.Trace (trace)
-import qualified Distance
-import qualified GHC.Num
+import Distance qualified
+import GHC.Num qualified
 import Language.Haskell.TH
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
 import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
@@ -27,7 +26,7 @@ import Sensitivity (
   SList,
   SMatrix,
  )
-import qualified Sensitivity
+import Sensitivity qualified
 
 instance Show (SensitiveType -> SensitiveType) where
   show f = "SensitiveType -> SensitiveType"
@@ -48,29 +47,29 @@ type SEnvToDistance = Map SensitiveType [GeneratedDistanceName]
 
 -- Generates a quick check main function given tests
 -- Output: main :: IO ()
-genMainQuickCheck :: String -> [Name] -> Q [Dec]
-genMainQuickCheck mainName names = do
-  testsAndProps <- sequence $ genQuickCheck <$> names
+genMainQuickCheck :: String -> [Name] -> ExtractSensitiveType -> Q [Dec]
+genMainQuickCheck mainName names extractSensitiveType = do
+  testsAndProps <- mapM (genQuickCheck extractSensitiveType) names
   let mainName' = mkName mainName
       testNames = \case { FunD testName _ -> testName } . fst <$> testsAndProps
       doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
-      testAndPropsList = concat $ tuple2ToList <$> testsAndProps
+      testAndPropsList = concatMap tuple2ToList testsAndProps
   return $ FunD mainName' [Clause [] (NormalB doStatement) []] : testAndPropsList
 
 -- Generates a quickcheck test for a given function
-genQuickCheck :: Name -> Q (Dec, Dec)
-genQuickCheck functionName = do
-  prop <- genProp functionName
+genQuickCheck :: ExtractSensitiveType -> Name -> Q (Dec, Dec)
+genQuickCheck extractSensitiveType functionName = do
+  prop <- genProp extractSensitiveType functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
   statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
 
-genProp :: Name -> Q Dec
-genProp functionName = do
+genProp :: ExtractSensitiveType -> Name -> Q Dec
+genProp extractSensitiveType functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
-  typeAsts <- parseASTs type_
+  typeAsts <- parseASTs type_ extractSensitiveType
 
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generating
@@ -103,48 +102,67 @@ genProp functionName = do
  where
   genNameForInputTypes ast =
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
-      <$> qNewName "input1" <*> qNewName "input2" <*> qNewName "distance"
+      <$> qNewName "input1"
+      <*> qNewName "input2"
+      <*> qNewName "distance"
+
+---- START Sensitive Environment Parser ----
+-- This is code to parse Template Haskell AST and extract a list of sensitive environments.
+
+type ExtractSensitiveType = Type -> Q Type
+
+{-
+Matches TH AST to get the unparsed Sensitive Type ASTs.
+This is a default instance. If a user creates a datatype that doesn't pattern match in one of these cases
+Then they may implement their own.
+-}
+defaultExtractSensitiveTypes :: ExtractSensitiveType
+defaultExtractSensitiveTypes typ = case typ of
+  AppT (AppT (ConT termName) (PromotedT metricName)) s ->
+    if termName == ''Sensitivity.SDouble
+      then pure s
+      else fail $ "defaultExtractSensitiveType failed to match termName. Consider creating a custom ExtractSensitiveType. Unmatched term name:" ++ show termName
+  AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
+    -- Container like type
+    -- TODO This was the case where we handled List and Matrix
+    -- It might be that a user might define something that doesn't have this shape
+    -- I think we can potentially make this parsing use a typeclass with a default instance
+    pure s
+  _ -> fail $ "defaultExtractSensitiveType failed to match TH AST. Consider creating a custom ExtractSensitiveType. Unmatched TH AST: " <> show typ
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
-parseASTs :: Type -> Q [SensitiveType]
-parseASTs typ = traverse typeToTerm (splitArgs (stripForall typ))
- where
-  -- Remove Forall if found
-  stripForall t = case t of
-    ForallT _ _ t' -> t'
-    t' -> t' -- else do nothing
-    -- Split when encountering ->
-  splitArgs :: Type -> [Type]
-  splitArgs typ = case typ of
-    AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
-    t -> [t]
-  typeToSEnv :: Type -> Q SensitiveType
-  typeToSEnv typ = case typ of
-    (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
-    AppT (AppT (ConT binaryOp) t1) t2 -> do
-      binaryOp <- nameToBinaryOp binaryOp
-      term1 <- typeToSEnv t1
-      term2 <- typeToSEnv t2
-      pure $ binaryOp term1 term2
-    _ -> fail $ "typeToSEnv unhandled case " <> show typ
-  nameToBinaryOp :: Name -> Q (SensitiveType -> SensitiveType -> SensitiveType)
-  nameToBinaryOp name
-    | isInfixOf "+++" $ show name = pure Plus'
-    | otherwise = fail $ "Unhandled binary op" <> show name
-  typeToTerm :: Type -> Q SensitiveType
-  typeToTerm typ = case typ of
-    AppT (AppT (ConT termName) (PromotedT metricName)) s ->
-      if termName == ''Sensitivity.SDouble
-        then typeToSEnv s
-        else fail $ "typeToTerm 2 unhandled case" ++ show termName
-    AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
-      -- Container like type
-      -- TODO This was the case where we handled List and Matrix
-      -- It might be that a user might define something that doesn't have this shape
-      -- I think we can potentially make this parsing use a typeclass with a default instance
-      typeToSEnv s
-    _ -> fail $ "typeToTerm main unhandled case" <> show typ
+parseASTs :: Type -> ExtractSensitiveType -> Q [SensitiveType]
+parseASTs typ extractSensitiveType = traverse (extractSensitiveType >=> typeToSEnv) (splitArgs (stripForall typ))
+
+-- Remove Forall if found
+stripForall t = case t of
+  ForallT _ _ t' -> t'
+  t' -> t' -- else do nothing
+
+-- Split when encountering ->
+splitArgs :: Type -> [Type]
+splitArgs typ = case typ of
+  AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
+  t -> [t]
+
+typeToSEnv :: Type -> Q SensitiveType
+typeToSEnv typ = case typ of
+  (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
+  AppT (AppT (ConT binaryOp) t1) t2 -> do
+    -- recursive case
+    binaryOp <- nameToBinaryOp binaryOp
+    term1 <- typeToSEnv t1
+    term2 <- typeToSEnv t2
+    pure $ binaryOp term1 term2
+  _ -> fail $ "typeToSEnv unhandled case " <> show typ
+
+nameToBinaryOp :: Name -> Q (SensitiveType -> SensitiveType -> SensitiveType)
+nameToBinaryOp name
+  | isInfixOf "+++" $ show name = pure Plus'
+  | otherwise = fail $ "Unhandled binary op" <> show name
+
+--- END Sensitive Environment Parser ---
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
@@ -182,7 +200,7 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs ast se
     se@(SEnv_ sname) -> do
       distance <- case M.lookup se senvToDistance of
         Nothing -> fail $ "Unable to find sensitivity environment in distance map " <> show se <> show senvToDistance
-        Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key. " <> show se <> show senvToDistance
+        Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <> show senvToDistance
         Just (GeneratedDistanceName distanceName : _) -> pure distanceName
       let newSEnvToDistance = M.update (\(_ : distances) -> Just distances) se senvToDistance
        in pure (VarE distance, newSEnvToDistance)
