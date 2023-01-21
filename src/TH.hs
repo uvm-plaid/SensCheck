@@ -45,10 +45,13 @@ type SEnvName = String
 -- Given an SEnv return the associated distance statement
 type SEnvToDistance = Map SensitiveType [GeneratedDistanceName]
 
+genMainQuickCheck :: String -> [Name] -> Q [Dec]
+genMainQuickCheck = genMainQuickCheck' defaultExtractSensitiveTypes
+
 -- Generates a quick check main function given tests
 -- Output: main :: IO ()
-genMainQuickCheck :: String -> [Name] -> ExtractSensitiveType -> Q [Dec]
-genMainQuickCheck mainName names extractSensitiveType = do
+genMainQuickCheck' :: ExtractSensitiveType -> String -> [Name] -> Q [Dec]
+genMainQuickCheck' extractSensitiveType mainName names = do
   testsAndProps <- mapM (genQuickCheck extractSensitiveType) names
   let mainName' = mkName mainName
       testNames = \case { FunD testName _ -> testName } . fst <$> testsAndProps
@@ -109,7 +112,7 @@ genProp extractSensitiveType functionName = do
 ---- START Sensitive Environment Parser ----
 -- This is code to parse Template Haskell AST and extract a list of sensitive environments.
 
-type ExtractSensitiveType = Type -> Q Type
+type ExtractSensitiveType = Type -> Either String Type
 
 {-
 Matches TH AST to get the unparsed Sensitive Type ASTs.
@@ -120,20 +123,25 @@ defaultExtractSensitiveTypes :: ExtractSensitiveType
 defaultExtractSensitiveTypes typ = case typ of
   AppT (AppT (ConT termName) (PromotedT metricName)) s ->
     if termName == ''Sensitivity.SDouble
-      then pure s
-      else fail $ "defaultExtractSensitiveType failed to match termName. Consider creating a custom ExtractSensitiveType. Unmatched term name:" ++ show termName
+      then Right s
+      else Left $ "defaultExtractSensitiveType failed to match termName. Consider creating a custom ExtractSensitiveType. Unmatched term name:" ++ show termName
   AppT (AppT (AppT (ConT termName) (PromotedT metricName)) innerType) s ->
     -- Container like type
-    -- TODO This was the case where we handled List and Matrix
-    -- It might be that a user might define something that doesn't have this shape
-    -- I think we can potentially make this parsing use a typeclass with a default instance
-    pure s
-  _ -> fail $ "defaultExtractSensitiveType failed to match TH AST. Consider creating a custom ExtractSensitiveType. Unmatched TH AST: " <> show typ
+    Right s
+  _ -> Left $ "defaultExtractSensitiveType failed to match TH AST. Consider creating a custom ExtractSensitiveType. Unmatched TH AST: " <> show typ
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> ExtractSensitiveType -> Q [SensitiveType]
-parseASTs typ extractSensitiveType = traverse (extractSensitiveType >=> typeToSEnv) (splitArgs (stripForall typ))
+parseASTs typ extractSensitiveType =
+  traverse
+    ( \typ ->
+        ( case extractSensitiveType typ of
+            Right unparsedSensType -> typeToSEnv unparsedSensType
+            Left err -> fail err
+        )
+    )
+    (splitArgs (stripForall typ))
 
 -- Remove Forall if found
 stripForall t = case t of
