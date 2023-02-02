@@ -13,6 +13,15 @@
                         %% http://ctan.org/pkg/subcaption
 \usepackage{xspace}
 
+\usepackage{minted}
+\setminted{fontsize=\footnotesize,
+  escapeinside=\#\#,
+  mathescape=true}
+\setmintedinline{fontsize=\small,
+  escapeinside=\&\&,
+  mathescape=true}
+\newcommand{\inline}[1]{\hspace*{-3pt}\mintinline{haskell}{#1}\hspace*{-3pt}}
+
 %% Some useful macros
 \newcommand{\system}{\textsc{SensCheck}\xspace}
 \newcommand{\quickcheck}{\textsc{QuickCheck}\xspace}
@@ -36,7 +45,17 @@ Text of abstract \ldots.
 
 \section{Introduction}
 
+\section{Background: Function Sensitivity and Differential Privacy}
+
+\todo{function sensitivity}
+
+\todo{sensitivity as part of differential privacy}
+
 \section{\system by Example}
+
+\begin{minted}{haskell}
+import qualified GHC.TypeLits as TL
+\end{minted}
 
 \todo{This is the ``tutorial section''}
 
