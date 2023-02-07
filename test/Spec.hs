@@ -13,7 +13,14 @@ import Test.QuickCheck (quickCheck, withMaxSuccess)
 import Utils
 
 f = add_dependently_typed_matrix_solo @2 @4
-$(genMainQuickCheck "tests" ['solo_plus, 'add_matrix_solo, 'f, 'solo_plus_incorrect])
+$(genMainQuickCheck "tests" ['solo_plus, 'f])
+
+$(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
 main :: IO ()
-main = tests
+main = do
+  putStrLn "\n\nThese tests are expected to pass:\n\n"
+  tests
+  putStrLn "\n\n=================================="
+  putStrLn "These tests are expected to fail:\n\n"
+  failing_tests
