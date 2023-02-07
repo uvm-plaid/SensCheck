@@ -4,8 +4,8 @@
 module Distance where
 
 import DistanceFunctions
-import Sensitivity (CMetric (..), NMetric (..), SDouble, SList (unSList), SMatrix, unSDouble)
-import Utils (toDoubleMatrix)
+import Sensitivity (CMetric (..), DPSMatrix, NMetric (..), SDouble, SList (unSList), SMatrix, unSDouble)
+import Utils (toDoubleMatrix, toDoubleMatrix')
 
 class Distance a where
   distance :: a -> a -> Double
@@ -24,6 +24,9 @@ instance Distance (SList L1 i s) where
 
 instance Distance (SMatrix L2 (SDouble Diff) s) where
   distance a b = l2dist (toDoubleMatrix a) - l2dist (toDoubleMatrix b)
+
+instance Distance (DPSMatrix x y L2 (SDouble Diff) s) where
+  distance a b = l2dist (toDoubleMatrix' a) - l2dist (toDoubleMatrix' b)
 
 instance Distance (SMatrix L1 i s) where
   distance a b = undefined
