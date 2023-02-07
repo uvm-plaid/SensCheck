@@ -130,7 +130,7 @@ defaultParseSensitiveTypes typ = do
       if termName == ''Sensitivity.SDouble
         then Right innerAst
         else Left $ "defaultParseSensitiveType failed to match termName. Consider creating a custom ParseSensitiveType. Unmatched term name:" ++ show termName
-    AppT (AppT (AppT (ConT _) (PromotedT _)) _) innerAst ->
+    AppT (AppT (AppT _ (PromotedT _)) _) innerAst ->
       -- Container like type
       Right innerAst
     _ -> Left $ "defaultParseSensitiveType failed to match TH AST. Consider creating a custom ParseSensitiveType. Unmatched TH AST: " <> show typ

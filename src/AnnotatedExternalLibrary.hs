@@ -1,5 +1,6 @@
 {- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
@@ -7,10 +8,10 @@
 module AnnotatedExternalLibrary where
 
 import Control.Monad (replicateM)
-import qualified Data.Matrix as Matrix
+import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import DistanceFunctions
-import Sensitivity (CMetric (..), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), type (+++))
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), type (+++))
 import Utils
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
@@ -81,3 +82,8 @@ prop_safe_add_solo a1 a2 b1 b2 =
       dout = norm_2 $ toDoubleMatrix (add_matrix_solo a1 b1) - toDoubleMatrix (add_matrix_solo a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
+add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2)
+add_dependently_typed_matrix_solo m1 m2 =
+  DPSMatrix_UNSAFE $
+    D_UNSAFE
+      <$> (unSDouble <$> unDPSMatrix m1) + (unSDouble <$> unDPSMatrix m2)
