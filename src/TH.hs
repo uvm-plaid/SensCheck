@@ -208,12 +208,15 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs ast se
   computeRhs sexp senvToDistance = case sexp of
     -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
     se@(SEnv_ sname) -> do
-      distance <- case M.lookup se senvToDistance of
-        Nothing -> fail $ "Unable to find sensitivity environment in distance map " <> show se <> show senvToDistance
-        Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <> show senvToDistance
-        Just (GeneratedDistanceName distanceName : _) -> pure distanceName
-      let newSEnvToDistance = M.update (\(_ : distances) -> Just distances) se senvToDistance
-       in pure (VarE distance, newSEnvToDistance)
+      distance <-
+        case M.lookup se senvToDistance of
+          Nothing -> fail $ "Unable to find sensitivity environment in distance map " <> show se <> show senvToDistance
+          Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <> " in Map: " <> show senvToDistance
+          Just (GeneratedDistanceName distanceName : _) -> pure distanceName
+      -- TODO this logic was weird. Why did I do it like this before?
+      -- Simplifying this fixes it. I think I was removing stuff when I shouldn't have.
+      -- It was removing the assosciated distance when you don't need to.
+      pure (VarE distance, senvToDistance)
     Plus' se1 se2 -> do
       (nextLeft, leftSenvToDistance) <- computeRhs se1 senvToDistance
       (nextRight, rightSenvToDistance) <- computeRhs se2 leftSenvToDistance

@@ -82,7 +82,7 @@ prop_safe_add_solo a1 a2 b1 b2 =
       dout = norm_2 $ toDoubleMatrix (add_matrix_solo a1 b1) - toDoubleMatrix (add_matrix_solo a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
-add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2)
+add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2 +++ s1)
 add_dependently_typed_matrix_solo m1 m2 =
   DPSMatrix_UNSAFE $
     D_UNSAFE
