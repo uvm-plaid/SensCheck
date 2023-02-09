@@ -45,6 +45,7 @@ Text of abstract \ldots.
 
 \section{Introduction}
 
+
 \section{Background: Function Sensitivity and Differential Privacy}
 
 \todo{function sensitivity}
@@ -53,8 +54,46 @@ Text of abstract \ldots.
 
 \section{\system by Example}
 
+Suppose that we need to test a Solo function that adds two sensitive doubles.
+The result should be another sensitive double with the sensitivities added.
+
+
+To express that with Solo you may create the following function:
 \begin{minted}{haskell}
-import qualified GHC.TypeLits as TL
+solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
+solo_plus a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
+\end{minted}
+
+To validate that the upper bound of that assertion is true with SensCheck you can create the following test:
+\begin{minted}{haskell}
+{-# LANGUAGE TemplateHaskell #-}
+import DistanceFunctions
+import Sensitivity
+import Utils
+import TH (genMainQuickCheck)
+import Test.QuickCheck (quickCheck, withMaxSuccess)
+
+$(genMainQuickCheck "tests" ['solo_plus])
+
+main :: IO ()
+main = tests
+\end{minted}
+
+Running the test case shows the following output:
+
+\todo{Show output}
+
+genMainQuickCheck genererates a quickcheck property and a main function that invokes that property.
+By invoking ghc with -ddump-splices you will see the generated output which will appear similar to the following:
+\begin{minted}{haskell}
+solo_plus_prop input1_a2zn input1_a2zq input2_a2zo input2_a2zr
+  = let
+      distance_a2zp = (distance input1_a2zn) input2_a2zo
+      distance_a2zs = (distance input1_a2zq) input2_a2zr
+      dout_a2zt
+        = (distance ((solo_plus input1_a2zn) input1_a2zq))
+            ((solo_plus input2_a2zo) input2_a2zr)
+    in (dout <= ((distance_a2zp + distance_a2zs) + 1.0e-8))
 \end{minted}
 
 \todo{This is the ``tutorial section''}
