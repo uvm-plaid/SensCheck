@@ -145,7 +145,7 @@ parseInnerSensitiveType typ = case typ of
     term1 <- parseInnerSensitiveType t1
     term2 <- parseInnerSensitiveType t2
     Right $ binaryOp term1 term2
-  _ -> Left $ "parseInnerSensitiveType failed matching on: " <> show typ
+  _ -> Left $ "parseInnerSensitiveType failed matching on: " <> show typ <> ". Consider creating a custom ParseSensitiveType."
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
@@ -168,7 +168,7 @@ splitArgs typ = case typ of
 nameToBinaryOp :: Name -> Either ParseError (SensitiveType -> SensitiveType -> SensitiveType)
 nameToBinaryOp name
   | isInfixOf "+++" $ show name = pure Plus'
-  | otherwise = Left $ "Unhandled binary op" <> show name
+  | otherwise = Left $ "Unhandled binary op: " <> show name <> ". Consider creating a custom ParseSensitiveType."
 
 --- END Sensitive Environment Parser ---
 
