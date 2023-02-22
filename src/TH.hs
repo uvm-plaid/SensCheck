@@ -129,12 +129,7 @@ Then they may implement their own SensitiveType parser.
 defaultParseSensitiveTypes :: ParseSensitiveType
 defaultParseSensitiveTypes typ = do
   innerAST <- case typ of
-    AppT (AppT (ConT termName) (PromotedT _)) innerAst ->
-      if termName == ''Sensitivity.SDouble
-        then Right innerAst
-        else Left $ "defaultParseSensitiveType failed to match termName. Consider creating a custom ParseSensitiveType. Unmatched term name:" ++ show termName
-    AppT (AppT (AppT _ (PromotedT _)) _) innerAst ->
-      -- Container like type
+    AppT _ innerAst ->
       Right innerAst
     _ -> Left $ "defaultParseSensitiveType failed to match TH AST. Consider creating a custom ParseSensitiveType. Unmatched TH AST: " <> show typ
   parseInnerSensitiveType innerAST
