@@ -126,6 +126,12 @@ instance Show (SDouble Diff s) where
 instance Arbitrary (SDouble Diff s) where
   arbitrary = D_UNSAFE <$> arbitrary @Double
 
+instance (Arbitrary (stype1 senv), Arbitrary (stype2 senv)) => Arbitrary (SPair metric stype1 stype2 senv) where
+  arbitrary = do
+    s1 <- arbitrary @(stype1 senv)
+    s2 <- arbitrary @(stype2 senv)
+    pure $ P_UNSAFE (s1, s2)
+
 -- Similar to SList we need a custom data type
 newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}
 

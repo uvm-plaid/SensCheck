@@ -1,6 +1,6 @@
 module DistanceFunctions where
 
-import qualified Data.Matrix as Matrix
+import Data.Matrix qualified as Matrix
 
 -- L2 norm of a Matrix
 norm_2 :: Floating n => Matrix.Matrix n -> n

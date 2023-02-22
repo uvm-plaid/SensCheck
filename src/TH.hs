@@ -64,15 +64,18 @@ genMainQuickCheck = genMainQuickCheck' defaultParseSensitiveTypes
 -- Generates a quickcheck test for a given function
 genQuickCheck :: ParseSensitiveType -> Name -> Q (Dec, Dec)
 genQuickCheck extractSensitiveType functionName = do
-  prop <- genProp extractSensitiveType functionName
+  prop <- genProp' extractSensitiveType functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
   statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
 
-genProp :: ParseSensitiveType -> Name -> Q Dec
-genProp extractSensitiveType functionName = do
+genProp :: Name -> Q Dec
+genProp = genProp' defaultParseSensitiveTypes
+
+genProp' :: ParseSensitiveType -> Name -> Q Dec
+genProp' extractSensitiveType functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
   typeAsts <- either fail pure $ parseASTs type_ extractSensitiveType
 

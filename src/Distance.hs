@@ -4,7 +4,7 @@
 module Distance where
 
 import DistanceFunctions
-import Sensitivity (CMetric (..), DPSMatrix, NMetric (..), SDouble, SList (unSList), SMatrix, unSDouble)
+import Sensitivity (CMetric (..), DPSMatrix, NMetric (..), SDouble, SList (unSList), SMatrix, SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 
 class Distance a where
@@ -19,14 +19,14 @@ instance Distance (SDouble Disc s) where
 instance Distance (SList L2 (SDouble Diff) s) where
   distance a b = l2dist (unSDouble <$> unSList a) - l2dist (unSDouble <$> unSList b)
 
-instance Distance (SList L1 i s) where
-  distance a b = undefined
+instance Distance (SPair L2 (SDouble Diff) (SDouble Diff) s) where
+  distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l2dist [unSDouble al, unSDouble ar] - l2dist [unSDouble bl, unSDouble br]
 
 instance Distance (SMatrix L2 (SDouble Diff) s) where
-  distance a b = l2dist (toDoubleMatrix a) - l2dist (toDoubleMatrix b)
+  distance a b = l2dist (toDoubleMatrix a - toDoubleMatrix b)
 
 instance Distance (DPSMatrix x y L2 (SDouble Diff) s) where
-  distance a b = l2dist (toDoubleMatrix' a) - l2dist (toDoubleMatrix' b)
+  distance a b = l2dist (toDoubleMatrix' a - toDoubleMatrix' b)
 
 instance Distance (SMatrix L1 i s) where
   distance a b = undefined

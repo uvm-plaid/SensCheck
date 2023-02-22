@@ -11,7 +11,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import DistanceFunctions
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), type (+++))
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++))
 import Utils
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
@@ -87,3 +87,6 @@ add_dependently_typed_matrix_solo m1 m2 =
   DPSMatrix_UNSAFE $
     D_UNSAFE
       <$> (unSDouble <$> unDPSMatrix m1) + (unSDouble <$> unDPSMatrix m2)
+
+add_pair_solo :: SPair L2 (SDouble Diff) (SDouble Diff) s1 -> SPair L2 (SDouble Diff) (SDouble Diff) s2 -> SPair L2 (SDouble Diff) (SDouble Diff) (s1 +++ s2)
+add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UNSAFE br)) = P_UNSAFE (D_UNSAFE $ al + bl, D_UNSAFE $ ar + br)
