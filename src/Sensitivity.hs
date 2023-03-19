@@ -123,7 +123,7 @@ type family JoinSens (s1 :: SEnv) (s2 :: SEnv) :: SEnv where
 instance Show (SDouble Diff s) where
   show sdouble = "SDouble Diff '[] " <> show (unSDouble sdouble)
 
-instance Arbitrary (SDouble Diff s) where
+instance Arbitrary (SDouble metric s) where
   arbitrary = D_UNSAFE <$> arbitrary @Double
 
 instance (Arbitrary (stype1 senv), Arbitrary (stype2 senv)) => Arbitrary (SPair metric stype1 stype2 senv) where

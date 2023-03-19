@@ -6,6 +6,12 @@ import Data.Matrix qualified as Matrix
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
 
+-- TODO I think I am confusing norms and distances.
+-- Review that and remove l1dist OR l1norm here?
+-- Joe called this the l1 norm though, so I think it's right.
+l1norm :: (Traversable f, Floating n) => f n -> n
+l1norm = sum
+
 -- TODO L1 https://programming-dp.com/notebooks/ch6.html#vector-valued-functions-and-their-sensitivities
 
 -- TODO verify these with Joe

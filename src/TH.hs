@@ -28,13 +28,13 @@ import Sensitivity (
  )
 import Sensitivity qualified
 
-instance Show (SensitiveType -> SensitiveType) where
-  show f = "SensitiveType -> SensitiveType"
+instance Show (SensitiveAST -> SensitiveAST) where
+  show f = "SensitiveAST -> SensitiveAST"
 
-data SensitiveType
+data SensitiveAST
   = SEnv_ Name -- Terminal Sensitivity Environment
-  | Plus' SensitiveType SensitiveType -- +++
-  | ScaleSens' SensitiveType Int
+  | Plus' SensitiveAST SensitiveAST -- +++
+  | ScaleSens' SensitiveAST Int
   | TruncateSens'
   deriving (Show, Eq, Ord)
 
@@ -43,28 +43,28 @@ data SensitiveType
 type SEnvName = String
 
 -- Given an SEnv return the associated distance statement
-type SEnvToDistance = Map SensitiveType [GeneratedDistanceName]
+type SEnvToDistance = Map SensitiveAST [GeneratedDistanceName]
 
 -- Generates quickcheck props, tests, and a main function that runs several tests
 -- Given a list of functions that will be tested against.
 -- Output: main :: IO ()
-genMainQuickCheck' :: ParseSensitiveType -> String -> [Name] -> Q [Dec]
-genMainQuickCheck' extractSensitiveType mainName names = do
-  testsAndProps <- mapM (genQuickCheck extractSensitiveType) names
+genMainQuickCheck' :: ParseSensitiveAST -> String -> [Name] -> Q [Dec]
+genMainQuickCheck' extractSensitiveAST mainName names = do
+  testsAndProps <- mapM (genQuickCheck extractSensitiveAST) names
   let mainName' = mkName mainName
       testNames = \case { FunD testName _ -> testName } . fst <$> testsAndProps
       doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
       testAndPropsList = concatMap tuple2ToList testsAndProps
   return $ FunD mainName' [Clause [] (NormalB doStatement) []] : testAndPropsList
 
--- Calls genMainQuickCheck' with a default instance of ParseSensitiveType
+-- Calls genMainQuickCheck' with a default instance of ParseSensitiveAST
 genMainQuickCheck :: String -> [Name] -> Q [Dec]
-genMainQuickCheck = genMainQuickCheck' defaultParseSensitiveTypes
+genMainQuickCheck = genMainQuickCheck' defaultParseSensitiveASTs
 
 -- Generates a quickcheck test for a given function
-genQuickCheck :: ParseSensitiveType -> Name -> Q (Dec, Dec)
-genQuickCheck extractSensitiveType functionName = do
-  prop <- genProp' extractSensitiveType functionName
+genQuickCheck :: ParseSensitiveAST -> Name -> Q (Dec, Dec)
+genQuickCheck extractSensitiveAST functionName = do
+  prop <- genProp' extractSensitiveAST functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
@@ -72,12 +72,12 @@ genQuickCheck extractSensitiveType functionName = do
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
 
 genProp :: Name -> Q Dec
-genProp = genProp' defaultParseSensitiveTypes
+genProp = genProp' defaultParseSensitiveASTs
 
-genProp' :: ParseSensitiveType -> Name -> Q Dec
-genProp' extractSensitiveType functionName = do
+genProp' :: ParseSensitiveAST -> Name -> Q Dec
+genProp' extractSensitiveAST functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
-  typeAsts <- either fail pure $ parseASTs type_ extractSensitiveType
+  typeAsts <- either fail pure $ parseASTs type_ extractSensitiveAST
 
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generating
@@ -116,42 +116,42 @@ genProp' extractSensitiveType functionName = do
 
 ---- START Sensitive Environment Parser ----
 
--- Parses template haskell's AST and returns either an error or the SensitiveType
-type ParseSensitiveType = Type -> Either String SensitiveType
-
 type ParseError = String
+
+-- Parses template haskell's AST and returns either an error or the SensitiveAST
+type ParseSensitiveAST = Type -> Either ParseError SensitiveAST
 
 {-
 Matches TH AST to get the unparsed Sensitive Type ASTs.
 This is a default instance. If a user creates a datatype that doesn't pattern match in one of these cases
-Then they may implement their own SensitiveType parser.
+Then they may implement their own SensitiveAST parser.
 -}
-defaultParseSensitiveTypes :: ParseSensitiveType
-defaultParseSensitiveTypes typ = do
+defaultParseSensitiveASTs :: ParseSensitiveAST
+defaultParseSensitiveASTs typ = do
   innerAST <- case typ of
     AppT _ innerAst ->
       Right innerAst
-    _ -> Left $ "defaultParseSensitiveType failed to match TH AST. Consider creating a custom ParseSensitiveType. Unmatched TH AST: " <> show typ
-  parseInnerSensitiveType innerAST
+    _ -> Left $ "defaultParseSensitiveAST failed to match TH AST. Consider creating a custom ParseSensitiveAST. Unmatched TH AST: " <> show typ
+  parseInnerSensitiveAST innerAST
 
--- Parses sensitive type stripped of container value.
+-- Parses sensitive ast stripped of container value.
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
-parseInnerSensitiveType :: Type -> Either ParseError SensitiveType
-parseInnerSensitiveType typ = case typ of
+parseInnerSensitiveAST :: Type -> Either ParseError SensitiveAST
+parseInnerSensitiveAST typ = case typ of
   (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp
-    term1 <- parseInnerSensitiveType t1
-    term2 <- parseInnerSensitiveType t2
+    term1 <- parseInnerSensitiveAST t1
+    term2 <- parseInnerSensitiveAST t2
     Right $ binaryOp term1 term2
-  _ -> Left $ "parseInnerSensitiveType failed matching on: " <> show typ <> ". Consider creating a custom ParseSensitiveType."
+  _ -> Left $ "parseInnerSensitiveAST failed matching on: " <> show typ <> ". Consider creating a custom ParseSensitiveAST."
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
-parseASTs :: Type -> ParseSensitiveType -> Either ParseError [SensitiveType]
-parseASTs typ extractSensitiveType =
-  traverse extractSensitiveType $ splitArgs (stripForall typ)
+parseASTs :: Type -> ParseSensitiveAST -> Either ParseError [SensitiveAST]
+parseASTs typ extractSensitiveAST =
+  traverse extractSensitiveAST $ splitArgs (stripForall typ)
 
 -- Remove Forall if found
 stripForall :: Type -> Type
@@ -165,10 +165,10 @@ splitArgs typ = case typ of
   AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
   t -> [t]
 
-nameToBinaryOp :: Name -> Either ParseError (SensitiveType -> SensitiveType -> SensitiveType)
+nameToBinaryOp :: Name -> Either ParseError (SensitiveAST -> SensitiveAST -> SensitiveAST)
 nameToBinaryOp name
   | isInfixOf "+++" $ show name = pure Plus'
-  | otherwise = Left $ "Unhandled binary op: " <> show name <> ". Consider creating a custom ParseSensitiveType."
+  | otherwise = Left $ "Unhandled binary op: " <> show name <> ". Consider creating a custom ParseSensitiveAST."
 
 --- END Sensitive Environment Parser ---
 
@@ -178,7 +178,7 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, O
 
 -- Generates distance statement
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
-genDistanceStatement :: SensitiveType -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
+genDistanceStatement :: SensitiveAST -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
 genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
   [d|$(pure $ VarP distance) = Distance.distance $(pure $ VarE input1) $(pure $ VarE input2)|]
 
@@ -186,7 +186,7 @@ genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName inpu
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: SensitiveType -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
+genDistanceOutStatement :: SensitiveAST -> Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
 genDistanceOutStatement ast functionName inputs1 inputs2 =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
@@ -199,10 +199,10 @@ genDistanceOutStatement ast functionName inputs1 inputs2 =
 --  dout <= [[ sensitivity_expression ]]
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
-genPropertyStatement :: SensitiveType -> SEnvToDistance -> Q Exp
+genPropertyStatement :: SensitiveAST -> SEnvToDistance -> Q Exp
 genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs ast senvToDistance) + 0.00000001|]
  where
-  computeRhs :: SensitiveType -> SEnvToDistance -> Q (Exp, SEnvToDistance)
+  computeRhs :: SensitiveAST -> SEnvToDistance -> Q (Exp, SEnvToDistance)
   computeRhs sexp senvToDistance = case sexp of
     -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
     se@(SEnv_ sname) -> do

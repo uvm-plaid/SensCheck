@@ -20,7 +20,7 @@ instance Distance (SList L2 (SDouble Diff) s) where
   distance a b = l2dist (unSDouble <$> unSList a) - l2dist (unSDouble <$> unSList b)
 
 instance Distance (SPair L2 (SDouble Diff) (SDouble Diff) s) where
-  distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l2dist [unSDouble al, unSDouble ar] - l2dist [unSDouble bl, unSDouble br]
+  distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l1norm [unSDouble al - unSDouble ar, unSDouble bl - unSDouble br]
 
 instance Distance (SMatrix L2 (SDouble Diff) s) where
   distance a b = l2dist (toDoubleMatrix a - toDoubleMatrix b)
