@@ -4,7 +4,6 @@
 module Distance where
 
 import Data.Matrix qualified as Matrix
-import DistanceFunctions
 import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 
@@ -33,3 +32,19 @@ instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
 -- TODO more instances.
+
+-- Distance Functions
+
+absdist :: Floating n => n -> n -> n
+absdist x y = abs $ x - y
+
+l1norm :: (Traversable f, Floating n) => f n -> n
+l1norm = sum
+
+l2norm :: (Traversable f, Floating n) => f n -> n
+l2norm n = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 n
+
+-- L2 norm of a Matrix
+-- TODO remove?
+norm_2 :: Floating n => Matrix.Matrix n -> n
+norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m

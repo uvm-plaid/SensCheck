@@ -5,7 +5,6 @@
 {-# OPTIONS_GHC -ddump-splices #-}
 
 import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_plus, solo_plus_incorrect)
-import DistanceFunctions
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (genMainQuickCheck)
