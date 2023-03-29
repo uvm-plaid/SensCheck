@@ -27,3 +27,6 @@ l2dist n = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 n
 
 diff :: Floating n => n -> n
 diff = undefined
+
+l2norm :: (Traversable f, Floating n) => f n -> n
+l2norm n = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 n

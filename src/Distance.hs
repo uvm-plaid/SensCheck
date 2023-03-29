@@ -3,33 +3,33 @@
 
 module Distance where
 
+import Data.Matrix qualified as Matrix
 import DistanceFunctions
-import Sensitivity (CMetric (..), DPSMatrix, NMetric (..), SDouble, SList (unSList), SMatrix, SPair (P_UNSAFE), unSDouble)
+import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 
 class Distance a where
   distance :: a -> a -> Double
 
-instance Distance (SDouble Diff s) where
+-- Base Types
+instance Distance (SDouble Diff senv) where
   distance a b = absdist (unSDouble a) (unSDouble b)
 
-instance Distance (SDouble Disc s) where
+instance Distance (SDouble Disc senv) where
   distance a b = undefined
 
-instance Distance (SList L2 (SDouble Diff) s) where
-  distance a b = l2dist (unSDouble <$> unSList a) - l2dist (unSDouble <$> unSList b)
+-- Container Types
 
-instance Distance (SPair L2 (SDouble Diff) (SDouble Diff) s) where
-  distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l1norm [unSDouble al - unSDouble ar, unSDouble bl - unSDouble br]
+instance Distance (stype senv) => Distance (SList L2 stype senv) where
+  distance (SList_UNSAFE a) (SList_UNSAFE b) = l2norm $ uncurry distance <$> zip a b
 
-instance Distance (SMatrix L2 (SDouble Diff) s) where
-  distance a b = l2dist (toDoubleMatrix a - toDoubleMatrix b)
+instance (Distance (stype1 senv), Distance (stype2 senv)) => Distance (SPair L2 stype1 stype2 senv) where
+  distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l2norm [distance al bl, distance ar br]
 
-instance Distance (DPSMatrix x y L2 (SDouble Diff) s) where
-  distance a b = l2dist (toDoubleMatrix' a - toDoubleMatrix' b)
+instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
+  distance (SMatrix_UNSAFE a) (SMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
-instance Distance (SMatrix L1 i s) where
-  distance a b = undefined
+instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
+  distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
 -- TODO more instances.
--- TODO could better compose these typeclasses together better
