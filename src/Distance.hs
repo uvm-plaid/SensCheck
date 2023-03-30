@@ -15,7 +15,7 @@ instance Distance (SDouble Diff senv) where
   distance a b = absdist (unSDouble a) (unSDouble b)
 
 instance Distance (SDouble Disc senv) where
-  distance a b = undefined
+  distance a b = discdist (unSDouble a) (unSDouble b)
 
 -- Container Types
 
@@ -38,11 +38,17 @@ instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
 absdist :: Floating n => n -> n -> n
 absdist x y = abs $ x - y
 
+discdist :: (Eq a1, Floating a2) => a1 -> a1 -> a2
+discdist x y = if x == y then 0 else 1
+
 l1norm :: (Traversable f, Floating n) => f n -> n
-l1norm = sum
+l1norm l = sum $ abs <$> l
 
 l2norm :: (Traversable f, Floating n) => f n -> n
-l2norm n = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 n
+l2norm l = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 l
+
+infnorm :: (Traversable f, Ord n) => f n -> n
+infnorm = maximum
 
 -- L2 norm of a Matrix
 -- TODO remove?
