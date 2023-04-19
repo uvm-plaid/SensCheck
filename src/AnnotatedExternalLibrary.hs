@@ -11,7 +11,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++))
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList)
 import Utils
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
@@ -90,3 +90,25 @@ add_dependently_typed_matrix_solo m1 m2 =
 
 add_pair_solo :: SPair L2 (SDouble Diff) (SDouble Diff) s1 -> SPair L2 (SDouble Diff) (SDouble Diff) s2 -> SPair L2 (SDouble Diff) (SDouble Diff) (s1 +++ s2)
 add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UNSAFE br)) = P_UNSAFE (D_UNSAFE $ al + bl, D_UNSAFE $ ar + br)
+
+-- Examples with mixed types
+
+example1 :: SDouble m s1 -> Int -> SDouble m s2
+example1 = undefined
+
+example2 :: SList m i s1 -> Int -> SList m i s1
+example2 = undefined
+
+-- First question are things like this even valid? Yes
+-- Solo2.hs seems to have a few examples.
+
+-- If there is a regular type we can just ignore it
+-- However how do we know for certain?
+-- Well our parser tells if it can parse a type or not
+-- If it can't parse the type then it might just be a regular type or the parser is off
+-- If we assume it's a regular type then we might end up missing sensitive types
+-- I'm not sure what to do exactly here.
+-- We could emit a warning and say we found these types and couldn't parse them
+-- We are assuming they are just regular type but you as the programmer need to check.
+
+-- Return Either Type SensitiveAST

@@ -20,13 +20,17 @@ instance Distance (SDouble Disc senv) where
 -- Container Types
 
 instance Distance (stype senv) => Distance (SList L2 stype senv) where
-  distance (SList_UNSAFE a) (SList_UNSAFE b) = l2norm $ uncurry distance <$> zip a b
+  distance (SList_UNSAFE a) (SList_UNSAFE b) = l2dist a b
+
+-- For 2 tuples with elements: (a_1, b_1) and (a_2, b_2)
+-- We need to take the following distances
+-- d(d(a_1, a_2), d(b_1, b_2))
 
 instance (Distance (stype1 senv), Distance (stype2 senv)) => Distance (SPair L2 stype1 stype2 senv) where
   distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l2norm [distance al bl, distance ar br]
 
 instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
-  distance (SMatrix_UNSAFE a) (SMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
+  distance (SMatrix_UNSAFE a) (SMatrix_UNSAFE b) = l2dist (Matrix.toList a) (Matrix.toList b)
 
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
@@ -49,6 +53,14 @@ l2norm l = sqrt $ foldl (\acc x -> x ** 2 + acc) 0 l
 
 infnorm :: (Traversable f, Ord n) => f n -> n
 infnorm = maximum
+
+-- Distances defined in terms of norms
+
+l1dist :: Distance a => [a] -> [a] -> Double
+l1dist x y = l1norm $ uncurry distance <$> zip x y
+
+l2dist :: Distance a => [a] -> [a] -> Double
+l2dist x y = l2norm $ uncurry distance <$> zip x y
 
 -- L2 norm of a Matrix
 -- TODO remove?
