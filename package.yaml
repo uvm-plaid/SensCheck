@@ -26,6 +26,7 @@ dependencies:
 - matrix
 - template-haskell
 - th-abstraction
+- safe
 
 default-extensions:
 - ImportQualifiedPost
