@@ -6,7 +6,8 @@
 
 module TH where
 
-import Control.Monad (unless, zipWithM, (>=>))
+import Control.Monad (replicateM, unless, when, zipWithM, (>=>))
+import Control.Monad.IO.Class (liftIO)
 import Data.Coerce (coerce)
 import Data.List (isInfixOf, transpose)
 import Data.Map (Map)
@@ -17,9 +18,10 @@ import Debug.Trace (trace)
 import Distance qualified
 import GHC.Num qualified
 import Language.Haskell.TH
-import Language.Haskell.TH.Ppr (pprint)
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
-import Language.Haskell.TH.Syntax (ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
+import Language.Haskell.TH.Ppr (pprint)
+import Language.Haskell.TH.Syntax (Lift (lift), ModName (ModName), Name (Name), NameFlavour (NameQ), qNewName)
+import Safe (initMay, lastMay)
 import Sensitivity (
   CMetric (..),
   NMetric (..),
@@ -28,18 +30,21 @@ import Sensitivity (
   SMatrix,
  )
 import Sensitivity qualified
-import Control.Monad.IO.Class (liftIO)
-import Safe ( initMay, lastMay )
 
-instance Show (SensitiveAST -> SensitiveAST) where
-  show f = "SensitiveAST -> SensitiveAST"
+-- Enable verbose logging
+verbose :: Bool
+verbose = True
 
 data SensitiveAST
   = SEnv_ Name -- Terminal Sensitivity Environment
   | Plus' SensitiveAST SensitiveAST -- +++
   | ScaleSens' SensitiveAST Int
+  | JoinSens' SensitiveAST SensitiveAST -- Max(a,b)
   | TruncateSens'
   deriving (Show, Eq, Ord)
+
+instance Show (SensitiveAST -> SensitiveAST) where
+  show f = "SensitiveAST -> SensitiveAST"
 
 -- Alias to represent types that are not sensitive for functions with mixed types
 -- It is possible that a user defined sensitive type may not be parsed correctly into a SensitiveAST
@@ -89,48 +94,61 @@ genProp' extractSensitiveAST functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
   let (unparsedTypes, typeAsts) = parseASTs type_ extractSensitiveAST
       functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
-      propName = mkName $ functionNameUnqualified <> "_prop" -- The quickcheck property function name we are generating
-
+      -- The name of the property function we are generating. Named [functionName]_prop
+      propName = mkName $ functionNameUnqualified <> "_prop"
   unless (null unparsedTypes) do
-    liftIO $ putStrLn "Warning: The following types were not parsed as sensitive types. Please verify they are not sensitive types."
+    liftIO $ putStrLn $ "Warning: The following types were not parsed as sensitive types." <>
+      "Please verify they are not sensitive types."
     liftIO $ putStrLn $ "Function: " <> show functionName
-    liftIO $ putStrLn $ "Types: " <> pprint unparsedTypes
+    liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Types:\n" <> pprint unparsedTypes <> "\n-----"
+    when verbose $ liftIO $ putStrLn $ "Parsed Input Types: " <> show typeAsts <> "\n-----"
 
   liftIO $ putStr $ show typeAsts
   inputTypeAsts <- maybe (fail noTypeAstsError) pure $ initMay typeAsts -- The input types of the function in AST form
   outputTypeAst <- maybe (fail noTypeAstsError) pure $ lastMay typeAsts -- The output of the function in AST form
 
   -- Generate 2 input variables and a distance variable for each Input Type
-  generatedNamesForInputType <- mapM genNameForInputTypes inputTypeAsts
+  inputTypeName <- mapM genNameForInputTypes inputTypeAsts
+
+  -- Generate a single input variable for each non-sensitive type
+  nonSensitiveInputTypeName <- replicateM (length unparsedTypes) genNameForNonSensitiveTypes
+
   -- Create a distance statement for each Input Type given the input arguments and distance argument
   distanceStatements <-
     mapM
       (\(ast, input1, input2, distance) -> genDistanceStatement ast distance input1 input2)
-      generatedNamesForInputType
+      inputTypeName
 
   let senvToDistance :: SEnvToDistance
-      senvToDistance = M.fromListWith (++) $ (\(term, _, _, distanceName) -> (term, [distanceName])) <$> generatedNamesForInputType
+      senvToDistance =
+        M.fromListWith (++) $
+          (\(term, _, _, distanceName) -> (term, [distanceName])) <$> inputTypeName
 
       -- Create the distance out statement.
       -- Gather all the arguments to the first call to F and all the arguments for the second call to F
-      inputs1 = (\(_, input1, _, _) -> input1) <$> generatedNamesForInputType
-      inputs2 = (\(_, _, input2, _) -> input2) <$> generatedNamesForInputType
+      inputs1 = (\(_, input1, _, _) -> input1) <$> inputTypeName
+      inputs2 = (\(_, _, input2, _) -> input2) <$> inputTypeName
 
-  distanceOutStatement <- genDistanceOutStatement functionName inputs1 inputs2
+  distanceOutStatement <- genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputTypeName
 
   propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
-      inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2)
+      inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2 <> nonSensitiveInputTypeName)
       body = Clause inputs (NormalB statements) []
   pure $ FunD propName [body]
  where
-  noTypeAstsError ::  String
-  noTypeAstsError = "Unable to parse " <> show functionName <> " no Sensitive Environments were found. Perhaps you used this on the wrong function or you may need to adjust ParseSensitiveAST?"
+  noTypeAstsError :: String
+  noTypeAstsError =
+    "Unable to parse "
+      <> show functionName
+      <> " no Sensitive Environments were found."
+      <> "Perhaps you used this on the wrong function or you may need to adjust ParseSensitiveAST?"
   genNameForInputTypes ast =
     (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
       <$> qNewName "input1"
       <*> qNewName "input2"
       <*> qNewName "distance"
+  genNameForNonSensitiveTypes = GeneratedArgName <$> qNewName "nonSensitiveInput"
 
 ---- START Sensitive Environment Parser ----
 
@@ -170,13 +188,16 @@ parseInnerSensitiveAST typ = case typ of
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> ParseSensitiveAST -> ([Type], [SensitiveAST])
 parseASTs typ extractSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
-  where
-    splitTypes = splitArgs (stripForall typ)
-    (unparsedTypes, sensAsts) = foldl (\(typeAcc, sensAstAcc) x -> case extractSensitiveAST x of
-      Nothing -> (typ : typeAcc, sensAstAcc)
-      Just sensAst -> (typeAcc, sensAst : sensAstAcc )
-      ) ([] :: [Type], [] :: [SensitiveAST]) splitTypes
-
+ where
+  splitTypes = splitArgs (stripForall typ)
+  (unparsedTypes, sensAsts) =
+    foldl
+      ( \(typeAcc, sensAstAcc) x -> case extractSensitiveAST x of
+          Nothing -> (typ : typeAcc, sensAstAcc)
+          Just sensAst -> (typeAcc, sensAst : sensAstAcc)
+      )
+      ([] :: [Type], [] :: [SensitiveAST])
+      splitTypes
 
 -- Remove Forall if found
 stripForall :: Type -> Type
@@ -193,7 +214,8 @@ splitArgs typ = case typ of
 nameToBinaryOp :: Name -> Maybe (SensitiveAST -> SensitiveAST -> SensitiveAST)
 nameToBinaryOp name
   | isInfixOf "+++" $ show name = pure Plus'
-  | otherwise = Nothing
+  | isInfixOf "JoinSens" $ show name = pure JoinSens'
+  | otherwise = trace (show name) $ Nothing
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
@@ -209,13 +231,13 @@ genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName inpu
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Name -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
-genDistanceOutStatement functionName inputs1 inputs2 =
+genDistanceOutStatement :: Name -> [GeneratedArgName] -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
+genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
-      function1Applied = applyInputsOnFunction inputs1
-      function2Applied = applyInputsOnFunction inputs2
+      function1Applied = applyInputsOnFunction (inputs1 <> nonSensitiveInputs)
+      function2Applied = applyInputsOnFunction (inputs2 <> nonSensitiveInputs)
    in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
 
 -- Generates:
@@ -223,27 +245,34 @@ genDistanceOutStatement functionName inputs1 inputs2 =
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: SensitiveAST -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|dout <= $(fst <$> computeRhs ast senvToDistance) + 0.00000001|]
+genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
  where
-  computeRhs :: SensitiveAST -> SEnvToDistance -> Q (Exp, SEnvToDistance)
+  computeRhs :: SensitiveAST -> SEnvToDistance -> Q Exp
   computeRhs sexp senvToDistance = case sexp of
     -- if it's just a sensitivity env (e.g. 's1') then return the distance value for it (e.g. 'd1')
     se@(SEnv_ sname) -> do
       distance <-
         case M.lookup se senvToDistance of
-          Nothing -> fail $ "Unable to find sensitivity environment: (" <> show se <> ") in distance map: " <> show senvToDistance
-          Just [] -> fail $ "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <> " in Map: " <> show senvToDistance
+          Nothing ->
+            fail $
+              "Unable to find sensitivity environment: (" <> show se <> ") in distance map: " <> show senvToDistance
+          Just [] ->
+            fail $
+              "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <>
+                " in Map: " <> show senvToDistance
           Just (GeneratedDistanceName distanceName : _) -> pure distanceName
-      pure (VarE distance, senvToDistance)
+      pure $ VarE distance
     Plus' se1 se2 -> do
-      (nextLeft, leftSenvToDistance) <- computeRhs se1 senvToDistance
-      (nextRight, rightSenvToDistance) <- computeRhs se2 leftSenvToDistance
-      nextExp <- [|$(pure nextLeft) + $(pure nextRight)|]
-      pure (nextExp, rightSenvToDistance)
+      nextLeft <- computeRhs se1 senvToDistance
+      nextRight <- computeRhs se2 senvToDistance
+      [|$(pure nextLeft) + $(pure nextRight)|]
     ScaleSens' se1 n -> do
-      (nextInnerExp, nextSenvToDistance) <- computeRhs se1 senvToDistance
-      nextExp <- [|n * $(pure nextInnerExp)|]
-      pure (nextExp, nextSenvToDistance)
+      nextInnerExp <- computeRhs se1 senvToDistance
+      [|n * $(pure nextInnerExp)|]
+    JoinSens' se1 se2 -> do
+      nextLeft <- computeRhs se1 senvToDistance
+      nextRight <- computeRhs se2 senvToDistance
+      [|max $(pure nextLeft) $(pure nextRight)|]
     _ -> fail "Undefined operation in computeRhs"
 
 -- Pair of tuple of same type to a list of 2 elements.

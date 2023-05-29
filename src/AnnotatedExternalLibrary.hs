@@ -11,7 +11,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList)
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens)
 import Utils
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
@@ -33,6 +33,11 @@ unsafe_unsafe_plus_prop x1 y1 x2 y2 =
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 solo_plus a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
+
+-- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
+-- TODO come up with an example that's less odd
+solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
+solo_mixed_types a b chooseA = D_UNSAFE $ max (unSDouble a) (unSDouble b)
 
 -- This is a "developer" who's reexposed but implemented incorrectly.
 solo_plus_incorrect :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff s1
