@@ -49,9 +49,9 @@ instance Show (SensitiveAST -> SensitiveAST) where
 -- Alias to represent types that are not sensitive for functions with mixed types
 -- It is possible that a user defined sensitive type may not be parsed correctly into a SensitiveAST
 -- In that case the user will need to alter their ParseSensitiveAST function
--- To aid the user all NonSensitiveASTs are printed and the user is instructed to verify any sensitive types
--- are not incorrectly parsed as NonSensitiveASTs
-type NonSensitiveAST = Type
+-- To aid the user all NonSensitiveTypes are printed and the user is instructed to verify any sensitive types
+-- are not incorrectly parsed as NonSensitiveTypes
+type NonSensitiveType = Type
 
 -- Name of sensitivty environment
 -- For example the name of `SDouble Diff s1` is s1
@@ -188,7 +188,7 @@ parseInnerSensitiveAST typ = case typ of
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
-parseASTs :: Type -> ParseSensitiveAST -> ([Type], [SensitiveAST])
+parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
 parseASTs typ extractSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
   splitTypes = splitArgs (stripForall typ)
