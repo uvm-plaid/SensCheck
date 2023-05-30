@@ -96,12 +96,14 @@ genProp' extractSensitiveAST functionName = do
       functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       -- The name of the property function we are generating. Named [functionName]_prop
       propName = mkName $ functionNameUnqualified <> "_prop"
+
+  -- Log parsing results
+  when verbose $ liftIO $ putStrLn $ "Parsed types: " <> show typeAsts <> "\n-----"
   unless (null unparsedTypes) do
     liftIO $ putStrLn $ "Warning: The following types were not parsed as sensitive types." <>
       "Please verify they are not sensitive types."
     liftIO $ putStrLn $ "Function: " <> show functionName
     liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Types:\n" <> pprint unparsedTypes <> "\n-----"
-    when verbose $ liftIO $ putStrLn $ "Parsed Input Types: " <> show typeAsts <> "\n-----"
 
   liftIO $ putStr $ show typeAsts
   inputTypeAsts <- maybe (fail noTypeAstsError) pure $ initMay typeAsts -- The input types of the function in AST form
