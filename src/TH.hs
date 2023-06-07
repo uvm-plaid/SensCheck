@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module TH where
 
@@ -37,13 +38,15 @@ verbose = True
 
 data SensitiveAST
   = SEnv_ Name -- Terminal Sensitivity Environment
+  | TyLit_ TyLit -- Terminal Type Literal (e.g. dependently typed 1)
   | Plus' SensitiveAST SensitiveAST -- +++
-  | ScaleSens' SensitiveAST Int
-  | JoinSens' SensitiveAST SensitiveAST -- Max(a,b)
+  | ScaleSens' SensitiveAST SensitiveAST -- n * senv
+  | JoinSens' SensitiveAST SensitiveAST -- Max(s1, s2)
   | TruncateSens'
   deriving (Show, Eq, Ord)
 
 instance Show (SensitiveAST -> SensitiveAST) where
+  show :: (SensitiveAST -> SensitiveAST) -> String
   show f = "SensitiveAST -> SensitiveAST"
 
 -- Alias to represent types that are not sensitive for functions with mixed types
@@ -64,8 +67,8 @@ type SEnvToDistance = Map SensitiveAST [GeneratedDistanceName]
 -- Given a list of functions that will be tested against.
 -- Output: main :: IO ()
 genMainQuickCheck' :: ParseSensitiveAST -> String -> [Name] -> Q [Dec]
-genMainQuickCheck' extractSensitiveAST mainName names = do
-  testsAndProps <- mapM (genQuickCheck extractSensitiveAST) names
+genMainQuickCheck' parseSensitiveAST mainName names = do
+  testsAndProps <- mapM (genQuickCheck parseSensitiveAST) names
   let mainName' = mkName mainName
       testNames = \case { FunD testName _ -> testName } . fst <$> testsAndProps
       doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
@@ -78,8 +81,8 @@ genMainQuickCheck = genMainQuickCheck' defaultParseSensitiveASTs
 
 -- Generates a quickcheck test for a given function
 genQuickCheck :: ParseSensitiveAST -> Name -> Q (Dec, Dec)
-genQuickCheck extractSensitiveAST functionName = do
-  prop <- genProp' extractSensitiveAST functionName
+genQuickCheck parseSensitiveAST functionName = do
+  prop <- genProp' parseSensitiveAST functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
@@ -90,9 +93,9 @@ genProp :: Name -> Q Dec
 genProp = genProp' defaultParseSensitiveASTs
 
 genProp' :: ParseSensitiveAST -> Name -> Q Dec
-genProp' extractSensitiveAST functionName = do
+genProp' parseSensitiveAST functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
-  let (unparsedTypes, typeAsts) = parseASTs type_ extractSensitiveAST
+  let (unparsedTypes, typeAsts) = parseASTs type_ parseSensitiveAST
       functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
       -- The name of the property function we are generating. Named [functionName]_prop
       propName = mkName $ functionNameUnqualified <> "_prop"
@@ -100,10 +103,10 @@ genProp' extractSensitiveAST functionName = do
   -- Log parsing results
   when verbose $ liftIO $ putStrLn $ "Parsed types: " <> show typeAsts <> "\n-----"
   unless (null unparsedTypes) do
-    liftIO $ putStrLn $ "Warning: The following types were not parsed as sensitive types." <>
+    liftIO $ putStrLn $ "Warning: The following types were not parsed as sensitive types. " <>
       "Please verify they are not sensitive types."
-    liftIO $ putStrLn $ "Function: " <> show functionName
-    liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Types:\n" <> pprint unparsedTypes <> "\n-----"
+    liftIO $ putStrLn $ "Function: " <> show functionName <> "\n"
+    liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Type(s):\n" <> pprint unparsedTypes <> "\n-----"
 
   liftIO $ putStr $ show typeAsts
   inputTypeAsts <- maybe (fail noTypeAstsError) pure $ initMay typeAsts -- The input types of the function in AST form
@@ -158,6 +161,7 @@ type ParseError = String
 
 -- Parses template haskell's AST and returns either a SensitiveAST or a template haskell type that failed to parse.
 -- The type can potentially be a sensitive type that the user should verify.
+-- TODO change this to Either Error SensitiveAST
 type ParseSensitiveAST = Type -> Maybe SensitiveAST
 
 {-
@@ -178,6 +182,7 @@ defaultParseSensitiveASTs typ = do
 parseInnerSensitiveAST :: Type -> Maybe SensitiveAST
 parseInnerSensitiveAST typ = case typ of
   (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
+  (LitT lit) -> pure (TyLit_ lit) 
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp
@@ -189,13 +194,13 @@ parseInnerSensitiveAST typ = case typ of
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
-parseASTs typ extractSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
+parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
   splitTypes = splitArgs (stripForall typ)
   (unparsedTypes, sensAsts) =
     foldl
-      ( \(typeAcc, sensAstAcc) x -> case extractSensitiveAST x of
-          Nothing -> (typ : typeAcc, sensAstAcc)
+      ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST x of
+          Nothing -> (x : typeAcc, sensAstAcc)
           Just sensAst -> (typeAcc, sensAst : sensAstAcc)
       )
       ([] :: [Type], [] :: [SensitiveAST])
@@ -204,6 +209,7 @@ parseASTs typ extractSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
 -- Remove Forall if found
 stripForall :: Type -> Type
 stripForall t = case t of
+  -- TODO for track KnownNat I need to get the constraint out of the forall
   ForallT _ _ t' -> t'
   t' -> t' -- else do nothing
 
@@ -214,10 +220,11 @@ splitArgs typ = case typ of
   t -> [t]
 
 nameToBinaryOp :: Name -> Maybe (SensitiveAST -> SensitiveAST -> SensitiveAST)
-nameToBinaryOp name
+nameToBinaryOp name 
   | isInfixOf "+++" $ show name = pure Plus'
   | isInfixOf "JoinSens" $ show name = pure JoinSens'
-  | otherwise = trace (show name) $ Nothing
+  | isInfixOf "ScaleSens" $ show name = pure ScaleSens'
+  | otherwise = trace ("Missing binary op: " <> show name) Nothing
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
@@ -268,14 +275,14 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDist
       nextLeft <- computeRhs se1 senvToDistance
       nextRight <- computeRhs se2 senvToDistance
       [|$(pure nextLeft) + $(pure nextRight)|]
-    ScaleSens' se1 n -> do
+    ScaleSens' se1 (TyLit_ (NumTyLit n)) -> do
       nextInnerExp <- computeRhs se1 senvToDistance
       [|n * $(pure nextInnerExp)|]
     JoinSens' se1 se2 -> do
       nextLeft <- computeRhs se1 senvToDistance
       nextRight <- computeRhs se2 senvToDistance
       [|max $(pure nextLeft) $(pure nextRight)|]
-    _ -> fail "Undefined operation in computeRhs"
+    _ -> fail $ "Undefined operation in computeRhs" <> show sexp
 
 -- Pair of tuple of same type to a list of 2 elements.
 tuple2ToList :: (a, a) -> [a]

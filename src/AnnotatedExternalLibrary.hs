@@ -3,7 +3,9 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds#-}
 
 module AnnotatedExternalLibrary where
 
@@ -11,8 +13,10 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens)
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens)
 import Utils
+import qualified GHC.TypeLits as TL
+import Data.Data (Proxy)
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -33,11 +37,6 @@ unsafe_unsafe_plus_prop x1 y1 x2 y2 =
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
 solo_plus a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
-
--- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
--- TODO come up with an example that's less odd
-solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
-solo_mixed_types a b chooseA = D_UNSAFE $ max (unSDouble a) (unSDouble b)
 
 -- This is a "developer" who's reexposed but implemented incorrectly.
 solo_plus_incorrect :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff s1
@@ -87,7 +86,7 @@ prop_safe_add_solo a1 a2 b1 b2 =
       dout = norm_2 $ toDoubleMatrix (add_matrix_solo a1 b1) - toDoubleMatrix (add_matrix_solo a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
-add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2 +++ s1)
+add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2)
 add_dependently_typed_matrix_solo m1 m2 =
   DPSMatrix_UNSAFE $
     D_UNSAFE
@@ -98,22 +97,16 @@ add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UN
 
 -- Examples with mixed types
 
-example1 :: SDouble m s1 -> Int -> SDouble m s2
-example1 = undefined
+-- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
+-- TODO come up with an example that's less odd
+solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
+solo_mixed_types a b chooseA = D_UNSAFE $ if chooseA then unSDouble a else unSDouble b
 
-example2 :: SList m i s1 -> Int -> SList m i s1
-example2 = undefined
+solo_mixed_types_mult :: SDouble Diff s1 -> SDouble Diff (ScaleSens s1 2)
+solo_mixed_types_mult (D_UNSAFE double) = D_UNSAFE (double * 2)
 
--- First question are things like this even valid? Yes
--- Solo2.hs seems to have a few examples.
-
--- If there is a regular type we can just ignore it
--- However how do we know for certain?
--- Well our parser tells if it can parse a type or not
--- If it can't parse the type then it might just be a regular type or the parser is off
--- If we assume it's a regular type then we might end up missing sensitive types
--- I'm not sure what to do exactly here.
--- We could emit a warning and say we found these types and couldn't parse them
--- We are assuming they are just regular type but you as the programmer need to check.
-
--- Return Either Type SensitiveAST
+-- Even more generic example
+-- TODO This is going to be maybe more complex to handle
+-- I need to track constraints (KnownNat n) 
+solo_mixed_types_mult_generic :: TL.KnownNat n => Proxy n -> SDouble Diff s1 -> SDouble Diff (ScaleSens s1 n)
+solo_mixed_types_mult_generic proxy (D_UNSAFE double) = D_UNSAFE (double * fromIntegral (TL.natVal proxy))
