@@ -3,11 +3,22 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    commit: 0e01175386523ac1176b48d024497ee16357f322
+    git: https://github.com/HuwCampbell/grenade.git
+    name: grenade
+    pantry-tree:
+      sha256: fefc5b0b40d5532dd8f0d68dfc8ef1209554c2935dc181a0c9c28833213a7a52
+      size: 5500
+    version: 0.1.0
+  original:
+    commit: 0e01175386523ac1176b48d024497ee16357f322
+    git: https://github.com/HuwCampbell/grenade.git
 snapshots:
 - completed:
-    sha256: a684cdbdf9304b325a503e0fe1d9648e9c18155ce4c7cfebbe8a7f93674e6295
-    size: 649106
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/5.yaml
+    sha256: 9fa4bece7acfac1fc7930c5d6e24606004b09e80aa0e52e9f68b148201008db9
+    size: 649606
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/18.yaml
   original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/5.yaml
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/18.yaml

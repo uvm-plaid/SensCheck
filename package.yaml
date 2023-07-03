@@ -27,6 +27,7 @@ dependencies:
 - template-haskell
 - th-abstraction
 - safe
+- grenade
 
 default-extensions:
 - ImportQualifiedPost
