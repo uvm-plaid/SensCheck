@@ -28,6 +28,12 @@ dependencies:
 - th-abstraction
 - safe
 - grenade
+- hmatrix
+- vector
+- text
+- transformers
+- attoparsec
+- MonadRandom
 
 default-extensions:
 - ImportQualifiedPost
