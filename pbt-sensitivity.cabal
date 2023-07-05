@@ -27,6 +27,7 @@ library
   exposed-modules:
       AnnotatedExternalLibrary
       Distance
+      IncorrectAnnotations
       Lib
       Primitives
       Privacy
@@ -34,6 +35,7 @@ library
       Rats
       Reals
       Sensitivity
+      SHMatrix
       Solo2
       StdLib
       TH
@@ -50,6 +52,7 @@ library
       QuickCheck
     , base >=4.7 && <5
     , containers
+    , hmatrix
     , matrix
     , safe
     , template-haskell
@@ -71,6 +74,7 @@ executable pbt-sensitivity-exe
       QuickCheck
     , base >=4.7 && <5
     , containers
+    , hmatrix
     , matrix
     , pbt-sensitivity
     , safe
@@ -95,6 +99,7 @@ test-suite pbt-sensitivity-test
       QuickCheck
     , base >=4.7 && <5
     , containers
+    , hmatrix
     , matrix
     , pbt-sensitivity
     , safe
