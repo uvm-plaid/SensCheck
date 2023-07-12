@@ -109,6 +109,19 @@ convTest iterations trainFile validateFile rate = do
     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
     return trained'
 
+convTest :: forall ε iterations.
+  (TL.KnownNat iterations) => LearningParameters
+  -> PM (ScalePriv (TruncatePriv ε Zero s) iterations) Network layers shapes -- ExceptT String IO ()
+convTest trainFile validateFile rate = do
+  net0 <- lift randomMnist
+  trainData <- readMNIST trainFile
+  validateData <- readMNIST validateFile
+  seqloop @iterations (runIteration trainData) net0
+ where
+  runIteration trainRows i net = do
+    let trained' = trainDP (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
+    return trained'
+
 -- TODO do we need to override this?
 -- backPropagate :: SingI (Last shapes)
 --               => Network layers shapes
@@ -128,12 +141,25 @@ trainDP ::
   SingI (Last shapes) =>
   LearningParameters ->
   Network layers shapes ->
-  S (Head shapes) ->
-  S (Last shapes) ->
-  Network layers shapes
-trainDP rate network input output =
-  let grads = backPropagate network input output
-   in applyUpdate rate network grads
+  [(S (Head shapes), S (Last shapes))] ->
+  PM (TruncatePriv ε Zero s) Network layers shapes
+trainDP rate network trainRows = do
+  let grad = clippedGrad network trainRows
+  noisyGrad <- laplace @ε grad -- Who knows what will go here????
+  return $ applyUpdate rate network noisyGrad
+
+-- THIS IS THE PIECE TO RUN SENSCHECK ON
+--                                                     needs to be a sensitive type
+--                                                    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+clippedGrad :: Network layers shapes -> SList L1 Disc (S (Head shapes), S (Last shapes)) senv
+  -> SGradients L2 layers senv -- need SGradients or simpler rep of gradients
+clippedGrad network trainRows =
+  let grads = foldl oneGrad $ UNSAFE_unSList trainRows
+      clippedGrads = map l2clip grads
+      avgGrad = columnMean clippedGrads
+  in UNSAFE_Sgrad avgGrad
+  where
+    oneGrad (i, o) = backPropagate network i o
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
