@@ -28,7 +28,6 @@ library
       AnnotatedExternalLibrary
       Distance
       DpMinst
-      IncorrectAnnotations
       Lib
       Primitives
       Privacy
@@ -57,7 +56,10 @@ library
     , grenade
     , hmatrix
     , matrix
+    , optparse-applicative
     , safe
+    , singletons
+    , singletons-base
     , template-haskell
     , text
     , th-abstraction
@@ -85,8 +87,11 @@ executable pbt-sensitivity-exe
     , grenade
     , hmatrix
     , matrix
+    , optparse-applicative
     , pbt-sensitivity
     , safe
+    , singletons
+    , singletons-base
     , template-haskell
     , text
     , th-abstraction
@@ -116,8 +121,11 @@ test-suite pbt-sensitivity-test
     , grenade
     , hmatrix
     , matrix
+    , optparse-applicative
     , pbt-sensitivity
     , safe
+    , singletons
+    , singletons-base
     , template-haskell
     , text
     , th-abstraction

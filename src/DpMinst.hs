@@ -1,37 +1,41 @@
-{-# LANGUAGE BangPatterns          #-}
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE TupleSections         #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module DpMinst where
+
 -- Code from example of MNIST: https://github.com/HuwCampbell/grenade/blob/master/examples/main/mnist.hs
 -- However with DP TODO
 
-import           Control.Applicative
-import           Control.Monad
-import           Control.Monad.Random
-import           Control.Monad.Trans.Except
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Random
+import Control.Monad.Trans.Except
 
-import qualified Data.Attoparsec.Text as A
-import           Data.List ( foldl' )
+import Data.Attoparsec.Text qualified as A
+import Data.List (foldl')
 #if ! MIN_VERSION_base(4,13,0)
 import           Data.Semigroup ( (<>) )
 #endif
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import qualified Data.Vector.Storable as V
+import Data.Text qualified as T
+import Data.Text.IO qualified as T
+import Data.Vector.Storable qualified as V
 
-import           Numeric.LinearAlgebra ( maxIndex )
-import qualified Numeric.LinearAlgebra.Static as SA
+import Numeric.LinearAlgebra (maxIndex)
+import Numeric.LinearAlgebra.Static qualified as SA
 
-import           Options.Applicative
+import Options.Applicative
 
-import           Grenade
-import           Grenade.Utils.OneHot
+import Grenade
+import Grenade.Utils.OneHot
+
+import Data.Singletons.Decide
+import Prelude.Singletons (Head, Last, SingI)
 
 -- It's logistic regression!
 --
@@ -39,8 +43,8 @@ import           Grenade.Utils.OneHot
 -- type.
 type FL i o =
   Network
-    '[ FullyConnected i o, Logit ]
-    '[ 'D1 i, 'D1 o, 'D1 o ]
+    '[FullyConnected i o, Logit]
+    '[ 'D1 i, 'D1 o, 'D1 o]
 
 -- The definition of our convolutional neural network.
 -- In the type signature, we have a type level list of shapes which are passed between the layers.
@@ -57,58 +61,103 @@ type FL i o =
 --
 type MNIST =
   Network
-    '[ Reshape,
-       Concat ('D3 28 28 1) Trivial ('D3 28 28 14) (InceptionMini 28 28 1 5 9),
-       Pooling 2 2 2 2, Relu,
-       Concat ('D3 14 14 3) (Convolution 15 3 1 1 1 1) ('D3 14 14 15) (InceptionMini 14 14 15 5 10), Crop 1 1 1 1, Pooling 3 3 3 3, Relu,
-       Reshape, FL 288 80, FL 80 10 ]
-    '[ 'D2 28 28, 'D3 28 28 1,
-       'D3 28 28 15, 'D3 14 14 15, 'D3 14 14 15, 'D3 14 14 18,
-       'D3 12 12 18, 'D3 4 4 18, 'D3 4 4 18,
-       'D1 288, 'D1 80, 'D1 10 ]
+    '[ Reshape
+     , Concat ('D3 28 28 1) Trivial ('D3 28 28 14) (InceptionMini 28 28 1 5 9)
+     , Pooling 2 2 2 2
+     , Relu
+     , Concat ('D3 14 14 3) (Convolution 15 3 1 1 1 1) ('D3 14 14 15) (InceptionMini 14 14 15 5 10)
+     , Crop 1 1 1 1
+     , Pooling 3 3 3 3
+     , Relu
+     , Reshape
+     , FL 288 80
+     , FL 80 10
+     ]
+    '[ 'D2 28 28
+     , 'D3 28 28 1
+     , 'D3 28 28 15
+     , 'D3 14 14 15
+     , 'D3 14 14 15
+     , 'D3 14 14 18
+     , 'D3 12 12 18
+     , 'D3 4 4 18
+     , 'D3 4 4 18
+     , 'D1 288
+     , 'D1 80
+     , 'D1 10
+     ]
 
 randomMnist :: MonadRandom m => m MNIST
 randomMnist = randomNetwork
 
 convTest :: Int -> FilePath -> FilePath -> LearningParameters -> ExceptT String IO ()
 convTest iterations trainFile validateFile rate = do
-  net0         <- lift randomMnist
-  trainData    <- readMNIST trainFile
+  net0 <- lift randomMnist
+  trainData <- readMNIST trainFile
   validateData <- readMNIST validateFile
-  lift $ foldM_ (runIteration trainData validateData) net0 [1..iterations]
-
-    where
+  lift $ foldM_ (runIteration trainData validateData) net0 [1 .. iterations]
+ where
+  -- TODO train calls applyUpdate and backPropagate
+  -- Goal: Override those functions
   trainEach rate' !network (i, o) = train rate' network i o
 
   runIteration trainRows validateRows net i = do
-    let trained' = foldl' (trainEach ( rate { learningRate = learningRate rate * 0.9 ^ i} )) net trainRows
-    let res      = fmap (\(rowP,rowL) -> (rowL,) $ runNet trained' rowP) validateRows
-    let res'     = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
+    let trained' = foldl' (trainEach (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
+    let res = fmap (\(rowP, rowL) -> (rowL,) $ runNet trained' rowP) validateRows
+    let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
     print trained'
     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
     return trained'
 
+-- TODO do we need to override this?
+-- backPropagate :: SingI (Last shapes)
+--               => Network layers shapes
+--               -> S (Head shapes)
+--               -> S (Last shapes)
+--               -> Gradients layers
+-- backPropagate network input target =
+--     let (tapes, output) = runNetwork network input
+--         (grads, _)      = runGradient network tapes (output - target)
+--     in  grads
+
+--
+
+-- TODO override this to do DP things
+-- Update a network with new weights after training with an instance.
+trainDP ::
+  SingI (Last shapes) =>
+  LearningParameters ->
+  Network layers shapes ->
+  S (Head shapes) ->
+  S (Last shapes) ->
+  Network layers shapes
+trainDP rate network input output =
+  let grads = backPropagate network input output
+   in applyUpdate rate network grads
+
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
 mnist' :: Parser MnistOpts
-mnist' = MnistOpts <$> argument str (metavar "TRAIN")
-                   <*> argument str (metavar "VALIDATE")
-                   <*> option auto (long "iterations" <> short 'i' <> value 15)
-                   <*> (LearningParameters
-                       <$> option auto (long "train_rate" <> short 'r' <> value 0.01)
-                       <*> option auto (long "momentum" <> value 0.9)
-                       <*> option auto (long "l2" <> value 0.0005)
-                       )
+mnist' =
+  MnistOpts
+    <$> argument str (metavar "TRAIN")
+    <*> argument str (metavar "VALIDATE")
+    <*> option auto (long "iterations" <> short 'i' <> value 15)
+    <*> ( LearningParameters
+            <$> option auto (long "train_rate" <> short 'r' <> value 0.01)
+            <*> option auto (long "momentum" <> value 0.9)
+            <*> option auto (long "l2" <> value 0.0005)
+        )
 
 main :: IO ()
 main = do
-    MnistOpts mnist vali iter rate <- execParser (info (mnist' <**> helper) idm)
-    putStrLn "Training convolutional neural network..."
+  MnistOpts mnist vali iter rate <- execParser (info (mnist' <**> helper) idm)
+  putStrLn "Training convolutional neural network..."
 
-    res <- runExceptT $ convTest iter mnist vali rate
-    case res of
-      Right () -> pure ()
-      Left err -> putStrLn err
+  res <- runExceptT $ convTest iter mnist vali rate
+  case res of
+    Right () -> pure ()
+    Left err -> putStrLn err
 
 readMNIST :: FilePath -> ExceptT String IO [(S ('D2 28 28), S ('D1 10))]
 readMNIST mnist = ExceptT $ do
@@ -118,6 +167,6 @@ readMNIST mnist = ExceptT $ do
 parseMNIST :: A.Parser (S ('D2 28 28), S ('D1 10))
 parseMNIST = do
   Just lab <- oneHot <$> A.decimal
-  pixels   <- many (A.char ',' >> A.double)
-  image    <- maybe (fail "Parsed row was of an incorrect size") pure (fromStorable . V.fromList $ pixels)
+  pixels <- many (A.char ',' >> A.double)
+  image <- maybe (fail "Parsed row was of an incorrect size") pure (fromStorable . V.fromList $ pixels)
   return (image, lab)

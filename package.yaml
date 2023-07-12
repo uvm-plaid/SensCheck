@@ -33,7 +33,10 @@ dependencies:
 - text
 - transformers
 - attoparsec
+- optparse-applicative
 - MonadRandom
+- singletons
+- singletons-base
 
 default-extensions:
 - ImportQualifiedPost
