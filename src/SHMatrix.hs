@@ -50,6 +50,6 @@ newtype SHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (f :: SEnv -> *) innerType
 --   show smatrix = show $ unDPSMatrix smatrix
 
 
-plus :: SHMatrix x y L0 (SDouble Diff) Double s1 -> SHMatrix x y L1 (SDouble Diff) Double s2 -> SHMatrix x y L1 (SDouble Diff) Double (s1 +++ s2)
+plus :: SHMatrix x y L1 (SDouble Diff) Double s1 -> SHMatrix x y L1 (SDouble Diff) Double s2 -> SHMatrix x y L1 (SDouble Diff) Double (s1 +++ s2)
 plus m0 m2 =
   SHMatrix_UNSAFE $ (unSHMatrix m0) + (unSHMatrix m2)

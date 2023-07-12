@@ -3,11 +3,22 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    commit: 7257fe9e5164e8109b76575cb4d73a996faab42b
+    git: https://github.com/acowley/Frames.git
+    name: Frames
+    pantry-tree:
+      sha256: 0846f61940c13218ca3c5182fb06560b74eaed82d738f51d31079a0cb36f0a11
+      size: 6297
+    version: 0.7.3
+  original:
+    commit: 7257fe9e5164e8109b76575cb4d73a996faab42b
+    git: https://github.com/acowley/Frames.git
 snapshots:
 - completed:
-    sha256: a684cdbdf9304b325a503e0fe1d9648e9c18155ce4c7cfebbe8a7f93674e6295
-    size: 649106
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/5.yaml
+    sha256: c4381351ba5837a6356fcc0ebeb7a61fdcaf3a085c903a6f730f56b131d5cb58
+    size: 639143
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/1.yaml
   original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/5.yaml
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/1.yaml

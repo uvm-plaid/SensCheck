@@ -1,5 +1,12 @@
 # solo-verify
 
+This branch was an attempt at adding DataFrames.
+This is having build issues going to go work on something else now but for future note:
+
+Goal: Make the entire dataframe sensitive not the columns
+I should be able to wrap around the data frame or maybe there is a functor on the dataframe preferably?
+
+
 ## Short description
 This is a library to verify that a Solo annotation is correct.
 
