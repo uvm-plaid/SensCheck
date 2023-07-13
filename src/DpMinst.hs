@@ -144,9 +144,9 @@ trainDP ::
   [(S (Head shapes), S (Last shapes))] ->
   PM (TruncatePriv ε Zero s) Network layers shapes
 trainDP rate network trainRows = do
-  let grad = clippedGrad network trainRows
+  let gradSum = clippedGrad network trainRows
   noisyGrad <- laplace @ε grad -- Who knows what will go here????
-  return $ applyUpdate rate network noisyGrad
+  return $ applyUpdate rate network (noisyGrad / (length trainRows))
 
 -- THIS IS THE PIECE TO RUN SENSCHECK ON
 --                                                     needs to be a sensitive type
@@ -156,8 +156,8 @@ clippedGrad :: Network layers shapes -> SList L1 Disc (S (Head shapes), S (Last 
 clippedGrad network trainRows =
   let grads = foldl oneGrad $ UNSAFE_unSList trainRows
       clippedGrads = map l2clip grads
-      avgGrad = columnMean clippedGrads
-  in UNSAFE_Sgrad avgGrad
+      gradSum = columnSum clippedGrads -- sum the gradients, column-wise, to get 1-sensitive val
+  in UNSAFE_Sgrad gradSum
   where
     oneGrad (i, o) = backPropagate network i o
 
