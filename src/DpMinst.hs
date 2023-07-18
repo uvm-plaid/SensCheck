@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
@@ -35,7 +36,11 @@ import Grenade
 import Grenade.Utils.OneHot
 
 import Data.Singletons.Decide
+import GHC.TypeLits qualified as TL
 import Prelude.Singletons (Head, Last, SingI)
+import Primitives qualified as Solo
+import Privacy qualified as Solo
+import Sensitivity qualified as Solo
 
 -- It's logistic regression!
 --
@@ -109,18 +114,25 @@ convTest iterations trainFile validateFile rate = do
     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
     return trained'
 
-convTest :: forall ε iterations.
-  (TL.KnownNat iterations) => LearningParameters
-  -> PM (ScalePriv (TruncatePriv ε Zero s) iterations) Network layers shapes -- ExceptT String IO ()
-convTest trainFile validateFile rate = do
-  net0 <- lift randomMnist
-  trainData <- readMNIST trainFile
-  validateData <- readMNIST validateFile
-  seqloop @iterations (runIteration trainData) net0
+-- main :: ExceptT String IO ()
+-- main = do
+-- initialNetwork <- lift randomMnist
+-- trainData <- readMNIST trainFile
+-- TODO "run" convTestDP  with net0 trainData
+
+convTestDP ::
+  forall e iterations s layers shapes.
+  (TL.KnownNat iterations) =>
+  [LabeledInput shapes] ->
+  Network layers shapes ->
+  LearningParameters ->
+  Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes) -- ExceptT String IO ()
+convTestDP trainData initialNetwork rate = do
+  Solo.seqloop @iterations (runIteration trainData) initialNetwork
  where
   runIteration trainRows i net = do
-    let trained' = trainDP (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
-    return trained'
+    let trained' = trainDP @e @s @layers @shapes (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
+    trained'
 
 -- TODO do we need to override this?
 -- backPropagate :: SingI (Last shapes)
@@ -133,33 +145,47 @@ convTest trainFile validateFile rate = do
 --         (grads, _)      = runGradient network tapes (output - target)
 --     in  grads
 
---
+-- training input and label (output)
+type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
 -- TODO override this to do DP things
 -- Update a network with new weights after training with an instance.
 trainDP ::
+  forall ε s layers shapes.
   SingI (Last shapes) =>
   LearningParameters ->
   Network layers shapes ->
-  [(S (Head shapes), S (Last shapes))] ->
-  PM (TruncatePriv ε Zero s) Network layers shapes
+  [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
+  Solo.PM (Solo.TruncatePriv ε Solo.Zero s) (Network layers shapes)
 trainDP rate network trainRows = do
-  let gradSum = clippedGrad network trainRows
-  noisyGrad <- laplace @ε grad -- Who knows what will go here????
+  -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
+  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
+      gradSum = clippedGrad network sensitiveTrainRows
+      gradSumUnsafe = unSGrad gradSum
+  noisyGrad <- Solo.laplace @ε @s grad -- Who knows what will go here????
   return $ applyUpdate rate network (noisyGrad / (length trainRows))
+
+-- TODO reference this:
+-- https://hackage.haskell.org/package/grenade-0.1.0/docs/src/Grenade-Core-Network.html#Network
+newtype SGradients (m :: Solo.CMetric) (grads :: [*]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
+
+-- The training row
+newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSInner :: LabeledInput shapes}
 
 -- THIS IS THE PIECE TO RUN SENSCHECK ON
 --                                                     needs to be a sensitive type
 --                                                    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-clippedGrad :: Network layers shapes -> SList L1 Disc (S (Head shapes), S (Last shapes)) senv
-  -> SGradients L2 layers senv -- need SGradients or simpler rep of gradients
+clippedGrad ::
+  Network layers shapes ->
+  Solo.SList Solo.L2 (STrainRow Solo.Disc shapes) senv ->
+  SGradients Solo.L2 layers senv -- need SGradients or simpler rep of gradients
 clippedGrad network trainRows =
   let grads = foldl oneGrad $ UNSAFE_unSList trainRows
       clippedGrads = map l2clip grads
       gradSum = columnSum clippedGrads -- sum the gradients, column-wise, to get 1-sensitive val
-  in UNSAFE_Sgrad gradSum
-  where
-    oneGrad (i, o) = backPropagate network i o
+   in UNSAFE_Sgrad gradSum
+ where
+  oneGrad (i, o) = backPropagate network i o
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
