@@ -161,8 +161,8 @@ trainDP rate network trainRows = do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
       gradSum = clippedGrad network sensitiveTrainRows
-      gradSumUnsafe = unSGrad gradSum
-  noisyGrad <- Solo.laplace @ε @s grad -- Who knows what will go here????
+      gradSumUnsafe = unSGrad gradSum -- Turns this to a number?
+  noisyGrad <- Solo.laplace @ε @s gradSumUnsafe -- Who knows what will go here????
   return $ applyUpdate rate network (noisyGrad / (length trainRows))
 
 -- TODO reference this:
@@ -170,7 +170,7 @@ trainDP rate network trainRows = do
 newtype SGradients (m :: Solo.CMetric) (grads :: [*]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
 
 -- The training row
-newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSInner :: LabeledInput shapes}
+newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
 
 -- THIS IS THE PIECE TO RUN SENSCHECK ON
 --                                                     needs to be a sensitive type
@@ -180,12 +180,15 @@ clippedGrad ::
   Solo.SList Solo.L2 (STrainRow Solo.Disc shapes) senv ->
   SGradients Solo.L2 layers senv -- need SGradients or simpler rep of gradients
 clippedGrad network trainRows =
-  let grads = foldl oneGrad $ UNSAFE_unSList trainRows
+  -- For every training example, backpropagate and clip the gradients
+  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows -- I think we want to map here not fold?
       clippedGrads = map l2clip grads
       gradSum = columnSum clippedGrads -- sum the gradients, column-wise, to get 1-sensitive val
-   in UNSAFE_Sgrad gradSum
+   in SGRAD_UNSAFE gradSum
  where
   oneGrad (i, o) = backPropagate network i o
+  l2clip = undefined -- TODO
+  columnSum = undefined -- TODO
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
