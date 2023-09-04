@@ -66,33 +66,33 @@ type MNIST =
 
 -- Layers in network
 type Layers =
-  '[ Reshape,
-     Concat ('D3 28 28 1) Trivial ('D3 28 28 14) (InceptionMini 28 28 1 5 9),
-     Pooling 2 2 2 2,
-     Relu,
-     Concat ('D3 14 14 3) (Convolution 15 3 1 1 1 1) ('D3 14 14 15) (InceptionMini 14 14 15 5 10),
-     Crop 1 1 1 1,
-     Pooling 3 3 3 3,
-     Relu,
-     Reshape,
-     FL 288 80,
-     FL 80 10
+  '[ Reshape
+   , Concat ('D3 28 28 1) Trivial ('D3 28 28 14) (InceptionMini 28 28 1 5 9)
+   , Pooling 2 2 2 2
+   , Relu
+   , Concat ('D3 14 14 3) (Convolution 15 3 1 1 1 1) ('D3 14 14 15) (InceptionMini 14 14 15 5 10)
+   , Crop 1 1 1 1
+   , Pooling 3 3 3 3
+   , Relu
+   , Reshape
+   , FL 288 80
+   , FL 80 10
    ]
 
 -- The shape
 type Shapes' =
-  '[ 'D2 28 28,
-     'D3 28 28 1,
-     'D3 28 28 15,
-     'D3 14 14 15,
-     'D3 14 14 15,
-     'D3 14 14 18,
-     'D3 12 12 18,
-     'D3 4 4 18,
-     'D3 4 4 18,
-     'D1 288,
-     'D1 80,
-     'D1 10
+  '[ 'D2 28 28
+   , 'D3 28 28 1
+   , 'D3 28 28 15
+   , 'D3 14 14 15
+   , 'D3 14 14 15
+   , 'D3 14 14 18
+   , 'D3 12 12 18
+   , 'D3 4 4 18
+   , 'D3 4 4 18
+   , 'D1 288
+   , 'D1 80
+   , 'D1 10
    ]
 
 type LastShape = Last Shapes'
@@ -106,18 +106,18 @@ convTest iterations trainFile validateFile rate = do
   trainData <- readMNIST trainFile
   validateData <- readMNIST validateFile
   lift $ foldM_ (runIteration trainData validateData) net0 [1 .. iterations]
-  where
-    -- TODO train calls applyUpdate and backPropagate
-    -- Goal: Override those functions
-    trainEach rate' !network (i, o) = train rate' network i o
+ where
+  -- TODO train calls applyUpdate and backPropagate
+  -- Goal: Override those functions
+  trainEach rate' !network (i, o) = train rate' network i o
 
-    runIteration trainRows validateRows net i = do
-      let trained' = foldl' (trainEach (rate {learningRate = learningRate rate * 0.9 ^ i})) net trainRows
-      let res = fmap (\(rowP, rowL) -> (rowL,) $ runNet trained' rowP) validateRows
-      let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
-      print trained'
-      putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
-      return trained'
+  runIteration trainRows validateRows net i = do
+    let trained' = foldl' (trainEach (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
+    let res = fmap (\(rowP, rowL) -> (rowL,) $ runNet trained' rowP) validateRows
+    let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
+    print trained'
+    putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
+    return trained'
 
 -- main :: ExceptT String IO ()
 -- main = do
@@ -134,10 +134,10 @@ convTestDP ::
   Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network Layers Shapes') -- ExceptT String IO ()
 convTestDP trainData initialNetwork rate = do
   Solo.seqloop @iterations (runIteration trainData) initialNetwork
-  where
-    runIteration trainRows i net = do
-      let trained' = trainDP @e @s (rate {learningRate = learningRate rate * 0.9 ^ i}) net trainRows
-      trained'
+ where
+  runIteration trainRows i net = do
+    let trained' = trainDP @e @s (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
+    trained'
 
 -- TODO do we need to override this?
 -- backPropagate :: SingI (Last shapes)
@@ -153,55 +153,76 @@ convTestDP trainData initialNetwork rate = do
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
+-- Gradients refers to one actual gradient for a single training example
+-- [Gradients] or whatever the actual type is the whole Gradient
+-- Gradient is actually not a gradient
+
+-- TODO ideally all the unsafe stuff is in clipped grad
+-- All the safe stuff will be in this function
 -- TODO override this to do DP things
 -- Update a network with new weights after training with an instance.
 trainDP ::
-  forall ε s. -- TODO this was getting a bit too abstract. add this back later: layers shapes.
+  forall e s. -- TODO this was getting a bit too abstract. add this back later: layers shapes.
   SingI (Last Shapes') =>
   LearningParameters ->
   Network Layers Shapes' ->
   [LabeledInput Shapes'] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
-  Solo.PM (Solo.TruncatePriv ε Solo.Zero s) (Network Layers Shapes')
+  Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network Layers Shapes')
 trainDP rate network trainRows = do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
       gradSum = clippedGrad network sensitiveTrainRows
-      gradSumUnsafe = Solo.D_UNSAFE $ gradsToDouble $ unSGrad gradSum -- Turn this to a number?
-  noisyGrad <- Solo.laplace @ε @s gradSumUnsafe -- Who knows what will go here????
-  return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
-  where
-    -- I am confused here.
-    -- Gradients is a list of Gradient
-    -- I do a destrucutre to get a single Gradient x
-    -- But Gradient is polymorphic on some x?
-    -- So how would I make it a Double?
-    gradsToDouble :: Gradients Layers -> Double
-    gradsToDouble (gradient :/> gradientRest) = undefined
+  -- gradSumUnsafe = Solo.D_UNSAFE $ gradsToDouble $ unSGrad gradSum -- Turn this to a number?
+  noisyGrad <- laplaceGradients @e @s gradSum -- Who knows what will go here????
+  -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
+  return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
+  --  where
+  -- I am confused here.
+  -- Gradients is a list of Gradient
+  -- I do a destrucutre to get a single Gradient x
+  -- But Gradient is polymorphic on some x?
+  -- So how would I make it a Double?
+  -- getGradientMatrix :: Gradients Layers -> _
+  -- getGradientMatrix (gradient :/> gradientRest) = undefined
 
 -- TODO reference this:
 -- https://hackage.haskell.org/package/grenade-0.1.0/docs/src/Grenade-Core-Network.html#Network
 newtype SGradients (m :: Solo.CMetric) (grads :: [*]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
 
+-- SHould return a non-sensitive Gradient
+laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
+laplaceGradients gradient = undefined
+
 -- The training row
 newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
 
 -- THIS IS THE PIECE TO RUN SENSCHECK ON
---                                                     needs to be a sensitive type
---                                                    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+-- We are going to take a list of gradients and turn it into a single gradient
+-- Takes all the training examples and computes gradients
+-- Clips it
+--
 clippedGrad ::
-  Network layers shapes ->
-  Solo.SList Solo.L2 (STrainRow Solo.Disc shapes) senv ->
-  SGradients Solo.L2 layers senv -- need SGradients or simpler rep of gradients
+  forall senv.
+  Network Layers Shapes' ->
+  Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
+  SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradients
 clippedGrad network trainRows =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows -- I think we want to map here not fold?
-      clippedGrads = map l2clip grads
-      gradSum = columnSum clippedGrads -- sum the gradients, column-wise, to get 1-sensitive val
-   in SGRAD_UNSAFE gradSum
-  where
-    oneGrad (i, o) = backPropagate network i o
-    l2clip = undefined -- TODO
-    columnSum = undefined -- TODO
+      clippedGrads = l2clip <$> grads
+      -- sum the gradients, column-wise, to get 1-sensitive val
+      gradSum = sumListOfGrads clippedGrads
+   in SGRAD_UNSAFE @Solo.L2 @_ @senv gradSum
+ where
+  -- Takes single training example and calculates the gradient for that training example
+  oneGrad (example, label) = backPropagate network example label
+  -- TODO at some point I will actually need to operate on the hmatrix representation
+  l2clip :: Gradients Layers -> Gradients Layers
+  l2clip = undefined -- TODO
+  -- This will also need to operate on the hmatrix representation
+  -- So just add matrix together
+  sumListOfGrads :: [Gradients Layers] -> Gradients Layers
+  sumListOfGrads gradsl = undefined -- TODO foldr (+) (matrix.fill 0) listOfGrads
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
