@@ -3,6 +3,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -132,8 +133,7 @@ convTestDP ::
   Network Layers Shapes' ->
   LearningParameters ->
   Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network Layers Shapes') -- ExceptT String IO ()
-convTestDP trainData initialNetwork rate = do
-  Solo.seqloop @iterations (runIteration trainData) initialNetwork
+convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
  where
   runIteration trainRows i net = do
     let trained' = trainDP @e @s (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
@@ -168,14 +168,14 @@ trainDP ::
   Network Layers Shapes' ->
   [LabeledInput Shapes'] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network Layers Shapes')
-trainDP rate network trainRows = do
+trainDP rate network trainRows = Solo.do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
       gradSum = clippedGrad network sensitiveTrainRows
   -- gradSumUnsafe = Solo.D_UNSAFE $ gradsToDouble $ unSGrad gradSum -- Turn this to a number?
   noisyGrad <- laplaceGradients @e @s gradSum -- Who knows what will go here????
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
-  return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
+  Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
   --  where
   -- I am confused here.
   -- Gradients is a list of Gradient
