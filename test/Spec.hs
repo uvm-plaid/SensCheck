@@ -4,7 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 
-import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_plus, solo_plus_incorrect, solo_mixed_types, solo_mixed_types_mult)
+import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_mixed_types_mult, solo_plus, solo_plus_incorrect)
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (genMainQuickCheck)

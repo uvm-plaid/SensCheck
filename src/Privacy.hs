@@ -82,7 +82,7 @@ type family AdvComp (k :: TL.Nat) (δ' :: TLReal) (penv :: EDEnv) :: EDEnv where
 
 newtype PM (p :: EDEnv) a = PM_UNSAFE {unPM :: IO a}
 
-return :: a -> PM s a
+return :: a -> PM '[] a
 return x = PM_UNSAFE $ P.return x
 
 (>>=) :: PM p1 a -> (a -> PM p2 b) -> PM (p1 ++++ p2) b
