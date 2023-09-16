@@ -20,22 +20,21 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-
 module SHMatrix where
 
-import Numeric.LinearAlgebra
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens)
 import GHC.TypeLits (Nat)
 import GHC.TypeLits qualified as TL
 import GHC.TypeNats (KnownNat)
+import Numeric.LinearAlgebra
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), JoinSens, NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SList, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), ScaleSens, type (+++))
 import Utils
 import Prelude
 
--- HMatrix doesn't have a functor instance so we need to instead reference the inner type directly 
+-- HMatrix doesn't have a functor instance so we need to instead reference the inner type directly
 newtype SHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (f :: SEnv -> *) innerType (s :: SEnv) = SHMatrix_UNSAFE {unSHMatrix :: Matrix innerType}
 
--- TODO 
+-- TODO
 -- instance (forall senv. Arbitrary (innerType senv), KnownNat x, KnownNat y) => Arbitrary (DPSMatrix x y cmetric innerType s1) where
 --   arbitrary = do
 --     -- Note that I'm not generating matrices of aribitary row and column size unlike SMatrix. This becomes useful in generating matrices that require rows and cols to match.
@@ -49,7 +48,6 @@ newtype SHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (f :: SEnv -> *) innerType
 -- instance (Show (f s)) => Show (DPSMatrix x y m f s) where
 --   show smatrix = show $ unDPSMatrix smatrix
 
-
-plus :: SHMatrix x y L0 (SDouble Diff) Double s1 -> SHMatrix x y L1 (SDouble Diff) Double s2 -> SHMatrix x y L1 (SDouble Diff) Double (s1 +++ s2)
+plus :: SHMatrix x y L1 (SDouble Diff) Double s1 -> SHMatrix x y L1 (SDouble Diff) Double s2 -> SHMatrix x y L1 (SDouble Diff) Double (s1 +++ s2)
 plus m0 m2 =
   SHMatrix_UNSAFE $ (unSHMatrix m0) + (unSHMatrix m2)

@@ -4,28 +4,42 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -ddump-splices #-}
 
-import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_plus, solo_plus_incorrect, solo_mixed_types, solo_mixed_types_mult)
 import GHC.TypeLits (KnownNat)
 import Sensitivity
+import System.Environment (getArgs)
 import TH (genMainQuickCheck)
 import Test.QuickCheck (quickCheck, withMaxSuccess)
 import Utils
+import qualified AnnotatedExternalLibrary as Correct
+import qualified IncorrectAnnotations as Incorrect
 
-f = add_dependently_typed_matrix_solo @2 @4
-$(genMainQuickCheck "tests" [
-  -- 'solo_plus,
-  -- 'add_pair_solo,
-  -- 'f,
-  'solo_mixed_types,
-  'solo_mixed_types_mult
-  ])
+add_dependently_typed_matrix_fixed = Correct.add_dependently_typed_matrix_solo @3 @4
 
-$(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
+add_dependently_typed_matrix_incorrect = Incorrect.add_dependently_typed_matrix_solo1 @3 @4
+
+$( genMainQuickCheck
+    "passing_tests"
+    [ 'Correct.solo_double
+    , 'Correct.solo_plus
+    , 'Correct.add_pair_solo
+    , 'add_dependently_typed_matrix_fixed
+    , 'Correct.solo_mixed_types
+    , 'Correct.solo_mixed_types_mult
+    ]
+ )
+
+$( genMainQuickCheck
+    "failing_tests"
+    [ 'Incorrect.add_pair_solo1
+    , 'add_dependently_typed_matrix_incorrect
+    , 'Incorrect.solo_double1
+    ]
+ )
 
 main :: IO ()
 main = do
-  putStrLn "\n\nThese tests are expected to pass:"
-  tests
-  putStrLn "\n\n=================================="
-  putStrLn "These tests are expected to fail:\n\n"
-  failing_tests
+  args <- getArgs
+  case args of
+    ["pass"] -> putStrLn "\n\nThese tests are expected to pass:" *> passing_tests
+    ["fail"] -> putStrLn "These tests are expected to fail:\n\n" *> failing_tests
+    otherwise -> putStrLn "Run as stack test --test-arguments=\"pass|fail\""

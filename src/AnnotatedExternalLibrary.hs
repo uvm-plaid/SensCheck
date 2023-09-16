@@ -110,3 +110,6 @@ solo_mixed_types_mult (D_UNSAFE double) = D_UNSAFE (double * 2)
 -- I need to track constraints (KnownNat n) 
 solo_mixed_types_mult_generic :: TL.KnownNat n => Proxy n -> SDouble Diff s1 -> SDouble Diff (ScaleSens s1 n)
 solo_mixed_types_mult_generic proxy (D_UNSAFE double) = D_UNSAFE (double * fromIntegral (TL.natVal proxy))
+
+solo_double :: SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
+solo_double a = D_UNSAFE $ unSDouble a + unSDouble a
