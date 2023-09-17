@@ -3,6 +3,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -235,7 +236,7 @@ clippedGrad network trainRows =
   heads ((grad1 :/> _) : t) = grad1 : heads t
   heads [] = []
   tails :: [Gradients Layers] -> [Gradients (Tail Layers)]
-  tails = undefined
+  tails ((_ :/> gradsT) : t) = gradsT : tails t
 
 -- Not this: (foldr mappendGrad memptyGrad) <$> gradsl
 -- sumListOfGradsHelper :: GradMonoid layer => [Gradients layers] -> Gradients layers
@@ -243,7 +244,7 @@ clippedGrad network trainRows =
 -- foldr mappendGrad memptyGrad [grad1, gras2, grad3]
 
 -- This could be a Monoid I think but got some compiler errors about using the type family Gradient
-class UpdateLayer x => GradMonoid x where
+class GradMonoid x where
   mappendGrad :: Gradient x -> Gradient x -> Gradient x
   memptyGrad :: Gradient x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
 
@@ -262,6 +263,18 @@ instance (KnownNat i, KnownNat o) => GradMonoid (FullyConnected i o) where
 instance GradMonoid Reshape where
   mappendGrad () () = ()
   memptyGrad = ()
+
+-- instance (SingI i, SingI o, Gradients xs) => GradMonoid (x ': xs) (i ': o ': rs) where
+-- mappendGrad = undefined
+-- memptyGrad = undefined
+
+instance Monoid (Gradients '[]) where
+  mappend _ _ = GNil
+  mempty = GNil
+
+instance (GradMonoid (Gradients xs), GradMonoid x) => GradMonoid (Gradients (x ': xs)) where
+  mappendGrad = undefined
+  memptyGrad = undefined
 
 -- TODO fill in the rest of the instances
 
