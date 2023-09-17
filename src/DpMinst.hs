@@ -28,6 +28,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
 import GHC.Generics ((:+:) (L1))
+import GHC.TypeLits (KnownNat)
 import GHC.TypeLits qualified as TL
 import Grenade
 import Grenade.Utils.OneHot
@@ -127,7 +128,7 @@ convTest iterations trainFile validateFile rate = do
 -- TODO "run" convTestDP  with net0 trainData
 
 convTestDP ::
-  forall e iterations s. -- TODO add this back ater layers shapes.
+  forall e iterations s. -- TODO add this back after layers shapes.
   (TL.KnownNat iterations) =>
   [LabeledInput Shapes'] ->
   Network Layers Shapes' ->
@@ -208,7 +209,7 @@ clippedGrad ::
   SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradients
 clippedGrad network trainRows =
   -- For every training example, backpropagate and clip the gradients
-  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows -- I think we want to map here not fold?
+  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clippedGrads = l2clip <$> grads
       -- sum the gradients, column-wise, to get 1-sensitive val
       gradSum = sumListOfGrads clippedGrads
@@ -223,6 +224,16 @@ clippedGrad network trainRows =
   -- So just add matrix together
   sumListOfGrads :: [Gradients Layers] -> Gradients Layers
   sumListOfGrads gradsl = undefined -- TODO foldr (+) (matrix.fill 0) listOfGrads
+  -- sumListOfGradsHelper :: Gradients Layers -
+
+-- This could be a Monoid I think but got some compiler errors about using the type family Gradient
+class UpdateLayer x => GradMonoid x where
+  mappendGrad :: Gradient x -> Gradient x -> Gradient x
+  memptyGrad :: Gradient x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
+
+instance (KnownNat i, KnownNat o) => GradMonoid (FullyConnected i o) where
+  mappendGrad (FullyConnected' wB wN) (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
+  memptyGrad = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
