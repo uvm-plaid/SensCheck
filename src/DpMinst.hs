@@ -224,18 +224,24 @@ clippedGrad network trainRows =
   l2clip = undefined -- TODO
   -- This will also need to operate on the hmatrix representation
   -- So just add matrix together
-  sumListOfGrads :: [Gradients Layers] -> Gradients Layers
-  sumListOfGrads gradsl = undefined -- (foldr (+) (matrix . fill 0) listOfGrads) <$> gradsl
+  sumListOfGrads :: forall layers. GradMonoid (Gradient (Head layers)) => [Gradients layers] -> Gradients layers
+  -- sumListOfGrads gradsl = undefined -- (foldr (+) (matrix . fill 0) listOfGrads) <$> gradsl
+  sumListOfGrads gradsl =
+    let headsG = heads gradsl
+        tailsG = tails gradsl
+        (grad :: Gradient (Head layers)) = foldr mappendGrad memptyGrad headsG
+        (next :: Gradients ((Head layers) ': (Tail layers))) = grad :/> (sumListOfGrads tailsG)
+     in next
   -- sumListOfGrads gradsl = case gradsl of
   -- [] -> undefined
-  -- [(grad :-> gradt) , (grad2 :-> gradt) ] :: gradst -> mappendGrad grad grad2
+  -- [(grad :-> gradt) , (grad2 :-> gradt) ] :: grads:/>t -> mappendGrad grad grad2
   -- Given a list of the gradient type level list
   -- Return the heads of the type level list
-  heads :: [Gradients Layers] -> [Gradient (Head Layers)]
+  heads :: [Gradients layers] -> [Gradient (Head layers)]
   heads ((grad1 :/> _) : t) = grad1 : heads t
   heads [] = []
-  tails :: [Gradients Layers] -> [Gradients (Tail Layers)]
-  tails = undefined
+  tails :: [Gradients layers] -> [Gradients (Tail layers)]
+  tails ((_ :/> gradt) : t) = gradt : tails t
 
 -- Not this: (foldr mappendGrad memptyGrad) <$> gradsl
 -- sumListOfGradsHelper :: GradMonoid layer => [Gradients layers] -> Gradients layers
@@ -243,23 +249,21 @@ clippedGrad network trainRows =
 -- foldr mappendGrad memptyGrad [grad1, gras2, grad3]
 
 -- This could be a Monoid I think but got some compiler errors about using the type family Gradient
-class UpdateLayer x => GradMonoid x where
-  mappendGrad :: Gradient x -> Gradient x -> Gradient x
-  memptyGrad :: Gradient x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
+-- class GradMonoid x where
+--   mappendGrad :: Gradient x -> Gradient x -> Gradient x
+--   memptyGrad :: Gradient x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
 
-instance (KnownNat i, KnownNat o) => GradMonoid (FullyConnected i o) where
-  mappendGrad ::
-    (KnownNat i, KnownNat o) =>
-    Gradient (FullyConnected i o) ->
-    Gradient (FullyConnected i o) ->
-    Gradient (FullyConnected i o)
+class GradMonoid x where
+  mappendGrad :: x -> x -> x
+  memptyGrad :: x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
+
+instance (KnownNat i, KnownNat o) => GradMonoid (FullyConnected' i o) where
   mappendGrad (FullyConnected' wB wN) (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
-  memptyGrad :: (KnownNat i, KnownNat o) => Gradient (FullyConnected i o)
   memptyGrad = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
 
 -- This is an example of a layer where the Gradient is ()
-instance GradMonoid Reshape where
+instance GradMonoid () where
   mappendGrad () () = ()
   memptyGrad = ()
 
