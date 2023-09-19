@@ -224,13 +224,13 @@ clippedGrad network trainRows =
   l2clip = undefined -- TODO
   -- This will also need to operate on the hmatrix representation
   -- So just add matrix together
-  sumListOfGrads :: forall layers. GradMonoid (Gradient (Head layers)) => [Gradients layers] -> Gradients layers
+  sumListOfGrads :: forall layer layerTail. GradMonoid (Gradient layer) => [Gradients (layer ': layerTail)] -> Gradients (layer ': layerTail)
   -- sumListOfGrads gradsl = undefined -- (foldr (+) (matrix . fill 0) listOfGrads) <$> gradsl
   sumListOfGrads gradsl =
     let headsG = heads gradsl
         tailsG = tails gradsl
-        (grad :: Gradient (Head layers)) = foldr mappendGrad memptyGrad headsG
-        (next :: Gradients ((Head layers) ': (Tail layers))) = grad :/> (sumListOfGrads tailsG)
+        (grad :: Gradient layer) = foldr mappendGrad memptyGrad headsG
+        (next :: Gradients (layer ': layerTail)) = grad :/> (sumListOfGrads tailsG)
      in next
   -- sumListOfGrads gradsl = case gradsl of
   -- [] -> undefined
