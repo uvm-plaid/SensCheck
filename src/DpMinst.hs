@@ -226,67 +226,70 @@ clippedGrad network trainRows =
   -- TODO at some point I will actually need to operate on the hmatrix representation
   l2clip :: Gradients Layers -> Gradients Layers
   l2clip = undefined -- TODO
-  -- This will also need to operate on the hmatrix representation
-  -- So just add matrix together
-  -- sumListOfGrads gradsl = undefined -- (foldr (+) (matrix . fill 0) listOfGrads) <$> gradsl
-  -- Sum a list of Gradients
-  sumListOfGrads :: forall layers. All MonoidGradient layers => [Gradients layers] -> Gradients layers
+
+heads :: [Gradients (layer ': layerTail)] -> [Gradient layer]
+heads ((grad1 :/> _) : t) = grad1 : heads t
+heads [] = []
+
+-- Ditto but tail
+tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
+tails ((_ :/> gradt) : t) = gradt : tails t
+
+-- Credit: https://www.morrowm.com/
+class SumListOfGrads layers where
+  sumListOfGrads :: [Gradients layers] -> Gradients layers
+
+instance SumListOfGrads '[] where
+  sumListOfGrads _ = GNil
+
+instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) => SumListOfGrads (layer : layerTail) where
   sumListOfGrads gradsl =
     let headsGrad = heads gradsl
         tailsGrad = tails gradsl
-        grad = fold headsGrad
-        (next :: Gradients layers) = grad :/> (sumListOfGrads tailsGrad)
+        (grad :: Gradient layer) = fold headsGrad
+        (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
      in next
-  -- Given a list of the gradient type level list
-  -- Return the heads of the type level list
-  heads :: [Gradients (layer ': layerTail)] -> [Gradient layer]
-  heads ((grad1 :/> _) : t) = grad1 : heads t
-  heads [] = []
-  -- Ditto but tail
-  tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
-  tails ((_ :/> gradt) : t) = gradt : tails t
 
--- Not this: (foldr mappendGrad memptyGrad) <$> gradsl
--- sumListOfGradsHelper :: GradMonoid layer => [Gradients layers] -> Gradients layers
--- sumListOfGradsHelper [grad1 :/> grad1t, grad2 :/> grad2t, grad3 :/> grad3t] =
--- foldr mappendGrad memptyGrad [grad1, gras2, grad3]
-
--- This could be a Monoid I think but got some compiler errors about using the type family Gradient
--- class GradMonoid x where
---   mappendGrad :: Gradient x -> Gradient x -> Gradient x
---   memptyGrad :: Gradient x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
-
--- class GradMonoid x where
---   mappendGrad :: x -> x -> x
---   memptyGrad :: x -- This would be a matrix/vector for example that would be filled with 0s. Useful for the fold
-
--- instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
---   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
-
--- Credit to Morrow on FP Discord
--- General purpose combinator
-type All :: (k -> Constraint) -> [k] -> Constraint
-type family All c xs where
-  All _ '[] = ()
-  All c (x : xs) = (c x, All c xs)
-
--- Constraint synonym
-class Monoid (Gradient layer) => MonoidGradient layer
-instance Monoid (Gradient layer) => MonoidGradient layer
-
-class UpdateLayer (Gradient layer) => UpdateLayerGradient layer
-instance UpdateLayer (Gradient layer) => UpdateLayerGradient layer
+instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
+  (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
 -- TODO make SemiGroup
-instance (KnownNat i, KnownNat o, Semigroup (FullyConnected' i o)) => Monoid (FullyConnected' i o) where
-  mappend (FullyConnected' wB wN) (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
-
+instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
   mempty = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
 
--- This is an example of a layer where the Gradient is ()
--- instance Monoid () where
---   mappend () () = ()
---   mempty = ()
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  -- , KnownNat kernelFlattened
+  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
+  ) =>
+  Semigroup (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  (<>) = undefined
+
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  -- , KnownNat kernelFlattened
+  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
+  ) =>
+  Monoid (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  mempty = undefined
+
+instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
+  (Concat x1 y1) <> (Concat x2 y2) = Concat (x1 <> x2) (y1 <> y2)
+
+instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
+  mempty = Concat mempty mempty
 
 -- TODO fill in the rest of the instances
 
