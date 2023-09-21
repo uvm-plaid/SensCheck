@@ -250,12 +250,58 @@ instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) 
         (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
      in next
 
+-- TODO this seems odd why do we need a semi group on Gradients?
+-- Oh maybe because it gets nested?
+instance Semigroup (Gradients '[]) where
+  _ <> _ = undefined
+
+instance Semigroup (Gradients '[]) => Monoid (Gradients '[]) where
+  mempty = GNil
+
+-- TODO maybe add the Gradient thing? Or remove it?
+instance (AllGradients Semigroup (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
+  _ <> _ = _
+
+instance (AllGradients Semigroup (layer : layerTail), AllGradients Monoid (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
+  mempty = _
+
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
 -- TODO make SemiGroup
 instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
   mempty = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
+
+-- TODO this is wrong I should just need Gradient FullyConnected
+-- It seems like I might be missing it in some instance?
+-- instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected i o) where
+--   (FullyConnected wB wN) <> (FullyConnected wB2 wN2) = _
+--
+-- instance (KnownNat i, KnownNat o) => Monoid (FullyConnected i o) where
+--   mempty = _
+
+-- TODO
+instance Semigroup (Network types shapes) where
+  (<>) :: Network types shapes -> Network types shapes -> Network types shapes
+  _ <> _ = _
+
+instance Monoid (Network types shapes) where
+  mempty = _
+
+-- Current error
+--     • No instance for (Monoid
+--                          (Gradients
+--                             '[Concat
+--                                 ('D3 14 14 5)
+--                                 (Network
+--                                    '[Pad 1 1 1 1, Convolution 15 5 3 3 1 1]
+--                                    '[ 'D3 14 14 15, 'D3 16 16 15, 'D3 14 14 5])
+--                                 ('D3 14 14 10)
+--                                 (Network
+--                                    '[Pad 2 2 2 2, Convolution 15 10 5 5 1 1]
+--                                    '[ 'D3 14 14 15, 'D3 18 18 15, 'D3 14 14 10])]))
+-- instance (KnownNat rows, KnownNat cols) => Semigroup (InceptionMini rows cols channels chx chy) where
+--   _ <> _ = _
 
 instance
   ( KnownNat channels
@@ -285,6 +331,7 @@ instance
   where
   mempty = undefined
 
+-- TODO Gradient Concat is just a tuple
 instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
   (Concat x1 y1) <> (Concat x2 y2) = Concat (x1 <> x2) (y1 <> y2)
 
@@ -328,3 +375,22 @@ parseMNIST = do
   pixels <- many (A.char ',' >> A.double)
   image <- maybe (fail "Parsed row was of an incorrect size") pure (fromStorable . V.fromList $ pixels)
   return (image, lab)
+
+-- Might need this stuff?
+-- General purpose combinator
+type All :: (k -> Constraint) -> [k] -> Constraint
+type family All c xs where
+  All _ '[] = ()
+  All c (x : xs) = (c x, All c xs)
+
+-- Have a constraint on all gradients
+type AllGradients :: (k -> Constraint) -> [k] -> Constraint
+type family AllGradients c xs where
+  AllGradients _ '[] = ()
+  AllGradients c (x : xs) = (c (Gradient x), All c xs)
+
+-- Constraint synonym
+-- class Monoid (Gradient layer) => MonoidGradient layer
+-- instance Monoid (Gradient layer) => MonoidGradient layer
+
+-- sumListOfGrads :: forall layer layerTail. All MonoidGradient layers => [Gradients layers] -> Gradients layers
