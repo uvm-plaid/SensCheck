@@ -235,6 +235,48 @@ heads [] = []
 tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
 tails ((_ :/> gradt) : t) = gradt : tails t
 
+-- This works
+type TestLayer = '[Convolution 1 1 1 1 1 1]
+
+-- This does not work
+type TestLayer2 = '[InceptionMini 28 28 1 5 9]
+
+test1 ::
+  [ Gradients
+      '[ Network -- This one gets the Gradient type function computed
+          '[ Concat -- Then it gets stuck here
+              ('D3 28 28 5)
+              ( Network
+                  '[Pad 1 1 1 1, Convolution 1 5 3 3 1 1] -- Oddly with the Monoid Gradients it gets stuck here
+                  '[ 'D3 28 28 1, 'D3 30 30 1, 'D3 28 28 5]
+              )
+              ('D3 28 28 9)
+              ( Network
+                  '[Pad 2 2 2 2, Convolution 1 9 5 5 1 1]
+                  '[ 'D3 28 28 1, 'D3 32 32 1, 'D3 28 28 9]
+              )
+           ]
+          '[ 'D3 28 28 1, 'D3 28 28 14] -- It ignores this which is good
+       ]
+  ] ->
+  Gradients
+    '[ Network
+        '[ Concat
+            ('D3 28 28 5)
+            ( Network
+                '[Pad 1 1 1 1, Convolution 1 5 3 3 1 1]
+                '[ 'D3 28 28 1, 'D3 30 30 1, 'D3 28 28 5]
+            )
+            ('D3 28 28 9)
+            ( Network
+                '[Pad 2 2 2 2, Convolution 1 9 5 5 1 1]
+                '[ 'D3 28 28 1, 'D3 32 32 1, 'D3 28 28 9]
+            )
+         ]
+        '[ 'D3 28 28 1, 'D3 28 28 14]
+     ]
+test1 = sumListOfGrads @TestLayer2
+
 -- Credit: https://www.morrowm.com/
 class SumListOfGrads layers where
   sumListOfGrads :: [Gradients layers] -> Gradients layers
@@ -250,58 +292,26 @@ instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) 
         (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
      in next
 
--- TODO this seems odd why do we need a semi group on Gradients?
--- Oh maybe because it gets nested?
 instance Semigroup (Gradients '[]) where
-  _ <> _ = undefined
+  GNil <> GNil = GNil
 
-instance Semigroup (Gradients '[]) => Monoid (Gradients '[]) where
+instance Monoid (Gradients '[]) where
   mempty = GNil
 
--- TODO maybe add the Gradient thing? Or remove it?
-instance (AllGradients Semigroup (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
-  _ <> _ = _
+-- This happens since there's nesting of Gradients.
+-- e.g. InceptionMini
+instance (SumListOfGrads (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
+  grad1 <> grad2 = sumListOfGrads [grad1, grad2]
 
-instance (AllGradients Semigroup (layer : layerTail), AllGradients Monoid (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
-  mempty = _
+instance (SumListOfGrads (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
+  -- TODO not sure about this one
+  mempty = sumListOfGrads []
 
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
--- TODO make SemiGroup
 instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
   mempty = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
-
--- TODO this is wrong I should just need Gradient FullyConnected
--- It seems like I might be missing it in some instance?
--- instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected i o) where
---   (FullyConnected wB wN) <> (FullyConnected wB2 wN2) = _
---
--- instance (KnownNat i, KnownNat o) => Monoid (FullyConnected i o) where
---   mempty = _
-
--- TODO
-instance Semigroup (Network types shapes) where
-  (<>) :: Network types shapes -> Network types shapes -> Network types shapes
-  _ <> _ = _
-
-instance Monoid (Network types shapes) where
-  mempty = _
-
--- Current error
---     • No instance for (Monoid
---                          (Gradients
---                             '[Concat
---                                 ('D3 14 14 5)
---                                 (Network
---                                    '[Pad 1 1 1 1, Convolution 15 5 3 3 1 1]
---                                    '[ 'D3 14 14 15, 'D3 16 16 15, 'D3 14 14 5])
---                                 ('D3 14 14 10)
---                                 (Network
---                                    '[Pad 2 2 2 2, Convolution 15 10 5 5 1 1]
---                                    '[ 'D3 14 14 15, 'D3 18 18 15, 'D3 14 14 10])]))
--- instance (KnownNat rows, KnownNat cols) => Semigroup (InceptionMini rows cols channels chx chy) where
---   _ <> _ = _
 
 instance
   ( KnownNat channels
@@ -337,8 +347,6 @@ instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
 
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
-
--- TODO fill in the rest of the instances
 
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
