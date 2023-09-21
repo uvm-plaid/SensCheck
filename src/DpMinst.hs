@@ -242,7 +242,7 @@ class SumListOfGrads layers where
 instance SumListOfGrads '[] where
   sumListOfGrads _ = GNil
 
-instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) => SumListOfGrads (layer : layerTail) where
+instance (Monoid layer, UpdateLayer layer, SumListOfGrads layerTail) => SumListOfGrads (layer : layerTail) where
   sumListOfGrads gradsl =
     let headsGrad = heads gradsl
         tailsGrad = tails gradsl
@@ -259,26 +259,23 @@ instance Semigroup (Gradients '[]) => Monoid (Gradients '[]) where
   mempty = GNil
 
 -- TODO maybe add the Gradient thing? Or remove it?
-instance (AllGradients Semigroup (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
+instance (All Semigroup (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
   _ <> _ = _
 
-instance (AllGradients Semigroup (layer : layerTail), AllGradients Monoid (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
+instance (All Semigroup (layer : layerTail), All Monoid (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
   mempty = _
 
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
--- TODO make SemiGroup
 instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
   mempty = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
 
--- TODO this is wrong I should just need Gradient FullyConnected
--- It seems like I might be missing it in some instance?
--- instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected i o) where
---   (FullyConnected wB wN) <> (FullyConnected wB2 wN2) = _
---
--- instance (KnownNat i, KnownNat o) => Monoid (FullyConnected i o) where
---   mempty = _
+instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected i o) where
+  (FullyConnected wB wN) <> (FullyConnected wB2 wN2) = FullyConnected (wB <> wB2) (wN <> wN2)
+
+instance (KnownNat i, KnownNat o) => Monoid (FullyConnected i o) where
+  mempty = FullyConnected mempty mempty
 
 -- TODO
 instance Semigroup (Network types shapes) where
@@ -288,20 +285,33 @@ instance Semigroup (Network types shapes) where
 instance Monoid (Network types shapes) where
   mempty = _
 
--- Current error
---     • No instance for (Monoid
---                          (Gradients
---                             '[Concat
---                                 ('D3 14 14 5)
---                                 (Network
---                                    '[Pad 1 1 1 1, Convolution 15 5 3 3 1 1]
---                                    '[ 'D3 14 14 15, 'D3 16 16 15, 'D3 14 14 5])
---                                 ('D3 14 14 10)
---                                 (Network
---                                    '[Pad 2 2 2 2, Convolution 15 10 5 5 1 1]
---                                    '[ 'D3 14 14 15, 'D3 18 18 15, 'D3 14 14 10])]))
--- instance (KnownNat rows, KnownNat cols) => Semigroup (InceptionMini rows cols channels chx chy) where
---   _ <> _ = _
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  -- , KnownNat kernelFlattened
+  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
+  ) =>
+  Semigroup (Convolution channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  (<>) = undefined
+
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  -- , KnownNat kernelFlattened
+  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
+  ) =>
+  Monoid (Convolution channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  mempty = undefined
 
 instance
   ( KnownNat channels
@@ -337,6 +347,11 @@ instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
 
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
+
+-- Actually this approach won't work
+-- I want a monoid for the Gradient of Crop
+instance (KnownNat i, KnownNat j, KnownNat k, KnownNat l) => Semigroup (Crop i j k l) where
+  (<>) _ _ = ()
 
 -- TODO fill in the rest of the instances
 
@@ -384,10 +399,10 @@ type family All c xs where
   All c (x : xs) = (c x, All c xs)
 
 -- Have a constraint on all gradients
-type AllGradients :: (k -> Constraint) -> [k] -> Constraint
-type family AllGradients c xs where
-  AllGradients _ '[] = ()
-  AllGradients c (x : xs) = (c (Gradient x), All c xs)
+-- type AllGradients :: (k -> Constraint) -> [k] -> Constraint
+-- type family AllGradients c xs where
+--   AllGradients _ '[] = ()
+--   AllGradients c (x : xs) = (c (Gradient x), All c xs)
 
 -- Constraint synonym
 -- class Monoid (Gradient layer) => MonoidGradient layer
