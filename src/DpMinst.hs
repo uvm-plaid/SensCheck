@@ -4,7 +4,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,6 +14,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE NoStarIsType #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module DpMinst where
@@ -33,7 +36,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
 import GHC.Generics ((:+:) (L1))
-import GHC.TypeLits (KnownNat)
+import GHC.TypeLits
 import GHC.TypeLits qualified as TL
 import Grenade
 import Grenade.Utils.OneHot
@@ -45,6 +48,7 @@ import Primitives qualified as Solo
 import Privacy qualified as Solo
 import Sensitivity qualified as Solo
 import Prelude
+import GHC.Base (Type)
 
 -- It's logistic regression!
 --
@@ -177,6 +181,7 @@ trainDP ::
   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network Layers Shapes')
 trainDP rate network trainRows = Solo.do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
+  -- TODO move this inside clipped grad
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
       gradSum = clippedGrad network sensitiveTrainRows
   -- gradSumUnsafe = Solo.D_UNSAFE $ gradsToDouble $ unSGrad gradSum -- Turn this to a number?
@@ -194,7 +199,7 @@ trainDP rate network trainRows = Solo.do
 
 -- TODO reference this:
 -- https://hackage.haskell.org/package/grenade-0.1.0/docs/src/Grenade-Core-Network.html#Network
-newtype SGradients (m :: Solo.CMetric) (grads :: [*]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
+newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
 
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
@@ -227,7 +232,7 @@ clippedGrad network trainRows =
   l2clip :: Gradients Layers -> Gradients Layers
   l2clip = undefined -- TODO
 
-heads :: [Gradients (layer ': layerTail)] -> [Gradient layer]
+heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
 heads ((grad1 :/> _) : t) = grad1 : heads t
 heads [] = []
 
@@ -235,49 +240,28 @@ heads [] = []
 tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
 tails ((_ :/> gradt) : t) = gradt : tails t
 
--- This works
-type TestLayer = '[Convolution 1 1 1 1 1 1]
+-- I got these working :triumph_emoji:
+type TestLayer = '[FullyConnected 1 1]
 
--- This does not work
+-- Example with nested gradients
 type TestLayer2 = '[InceptionMini 28 28 1 5 9]
 
-test1 ::
-  [ Gradients
-      '[ Network -- This one gets the Gradient type function computed
-          '[ Concat -- Then it gets stuck here
-              ('D3 28 28 5)
-              ( Network
-                  '[Pad 1 1 1 1, Convolution 1 5 3 3 1 1] -- Oddly with the Monoid Gradients it gets stuck here
-                  '[ 'D3 28 28 1, 'D3 30 30 1, 'D3 28 28 5]
-              )
-              ('D3 28 28 9)
-              ( Network
-                  '[Pad 2 2 2 2, Convolution 1 9 5 5 1 1]
-                  '[ 'D3 28 28 1, 'D3 32 32 1, 'D3 28 28 9]
-              )
-           ]
-          '[ 'D3 28 28 1, 'D3 28 28 14] -- It ignores this which is good
-       ]
-  ] ->
-  Gradients
-    '[ Network
-        '[ Concat
-            ('D3 28 28 5)
-            ( Network
-                '[Pad 1 1 1 1, Convolution 1 5 3 3 1 1]
-                '[ 'D3 28 28 1, 'D3 30 30 1, 'D3 28 28 5]
-            )
-            ('D3 28 28 9)
-            ( Network
-                '[Pad 2 2 2 2, Convolution 1 9 5 5 1 1]
-                '[ 'D3 28 28 1, 'D3 32 32 1, 'D3 28 28 9]
-            )
-         ]
-        '[ 'D3 28 28 1, 'D3 28 28 14]
-     ]
-test1 = sumListOfGrads @TestLayer2
-
--- Credit: https://www.morrowm.com/
+-- SumListOfGrads is a type class with 2 instances.
+-- We need to take a regular list of Gradients which is a type level list.
+-- And output a *single* list of type level Gradients.
+--
+-- e.g. [ '[FullyConnected, Pad] ]to a '[FullyConnect, Pad]
+--
+-- Also we will just take the Gradient of each layer and add them.
+-- Well to combine things you can use a Monoid and also a fold.
+--
+-- > fold [Gradient FullyConnected, Gradient FullyConnected]
+-- Gradient FullyConnected
+--
+-- The first instance takes in a empty type level list of gradients.
+-- Result is a
+--
+-- Credit to https://www.morrowm.com/ for helping me with this technique.
 class SumListOfGrads layers where
   sumListOfGrads :: [Gradients layers] -> Gradients layers
 
@@ -320,12 +304,39 @@ instance
   , KnownNat kernelColumns
   , KnownNat strideRows
   , KnownNat strideColumns
-  -- , KnownNat kernelFlattened
-  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
   ) =>
   Semigroup (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  (<>) = undefined
+  (<>) ::
+    ( KnownNat channels
+    , KnownNat filters
+    , KnownNat kernelRows
+    , KnownNat kernelColumns
+    , KnownNat strideRows
+    , KnownNat strideColumns
+    ) =>
+    Convolution'
+      channels
+      filters
+      kernelRows
+      kernelColumns
+      strideRows
+      strideColumns ->
+    Convolution'
+      channels
+      filters
+      kernelRows
+      kernelColumns
+      strideRows
+      strideColumns ->
+    Convolution'
+      channels
+      filters
+      kernelRows
+      kernelColumns
+      strideRows
+      strideColumns
+  (Convolution' grad1) <> (Convolution' grad2) = Convolution' (grad1 + grad2)
 
 instance
   ( KnownNat channels
@@ -334,12 +345,20 @@ instance
   , KnownNat kernelColumns
   , KnownNat strideRows
   , KnownNat strideColumns
-  -- , KnownNat kernelFlattened
-  -- , kernelFlattened ~ kernelRows (*) kernelColumns (*) channels
+  , KnownNat (kernelRows * kernelColumns * channels)
   ) =>
   Monoid (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  mempty = undefined
+  mempty ::
+    ( KnownNat channels
+    , KnownNat filters
+    , KnownNat kernelRows
+    , KnownNat kernelColumns
+    , KnownNat strideRows
+    , KnownNat strideColumns
+    ) =>
+    Convolution' channels filters kernelRows kernelColumns strideRows strideColumns
+  mempty = Convolution' $ SA.matrix @(kernelRows * kernelColumns * channels) [0 .. 0]
 
 -- TODO Gradient Concat is just a tuple
 instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where

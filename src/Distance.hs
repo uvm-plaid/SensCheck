@@ -35,6 +35,8 @@ instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
+-- TODO instance for Gradient using l2norm
+
 -- TODO more instances.
 
 -- Distance Functions
