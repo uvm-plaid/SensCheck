@@ -5,7 +5,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
@@ -160,7 +159,7 @@ clippedGrad ::
 clippedGrad network trainRows =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
-      clippedGrads = l2clip <$> grads
+      clippedGrads = l2clipGrad <$> grads
       -- sum the gradients, column-wise, to get 1-sensitive val
       gradSum = sumListOfGrads clippedGrads
    in SGRAD_UNSAFE @Solo.L2 @_ @senv gradSum
@@ -168,8 +167,8 @@ clippedGrad network trainRows =
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
   -- TODO at some point I will actually need to operate on the hmatrix representation
-  l2clip :: Gradients Layers -> Gradients Layers
-  l2clip = undefined -- TODO
+  l2clipGrad :: Gradients Layers -> Gradients Layers
+  l2clipGrad = undefined -- TODO
   --
 
 -- SumListOfGrads is a type class with 2 instances.
@@ -195,13 +194,13 @@ class SumListOfClippedGrads layers where
 instance SumListOfClippedGrads '[] where
   sumListOfGrads _ = GNil
 
-instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfClippedGrads layerTail) => SumListOfClippedGrads (layer : layerTail) where
+instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer, SumListOfClippedGrads layerTail) => SumListOfClippedGrads (layer : layerTail) where
   sumListOfGrads gradsl =
     let headsGrad = heads gradsl
         tailsGrad = tails gradsl
-        (grad :: Gradient layer) = fold headsGrad -- TODO foldMap?
-        (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
-     in next
+        -- Collapse list of Gradient layer and then clip
+        (clippedGrad :: Gradient layer) = foldMap l2clipGrad headsGrad
+     in clippedGrad :/> sumListOfGrads tailsGrad
 
 heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
 heads ((grad1 :/> _) : t) = grad1 : heads t
@@ -263,8 +262,10 @@ instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
 
+-- Clips gradients
+-- https://programming-dp.com/ch12.html?highlight=clipping#gradient-clipping
 class ClipGrad grad where
-  l2clip :: grad -> grad
+  l2clipGrad :: grad -> grad
 
 instance
   ( KnownNat channels
@@ -277,10 +278,27 @@ instance
   ) =>
   ClipGrad (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  l2clip (Convolution' grad) = undefined
+  l2clipGrad (Convolution' grad) = undefined
 
 instance (ClipGrad x, ClipGrad y) => ClipGrad (Concat m x n y) where
-  l2clip (Concat c1 c2) = Concat (l2clip c1) (l2clip c2)
+  l2clipGrad (Concat c1 c2) = Concat (l2clipGrad c1) (l2clipGrad c2)
+
+instance ClipGrad (Gradients '[]) where
+  l2clipGrad GNil = GNil
+
+-- This happens since there's nesting of Gradients.
+-- e.g. InceptionMini
+instance (ClipGrad (Gradient layer), ClipGrad (Gradients layerTail)) => ClipGrad (Gradients (layer : layerTail)) where
+  l2clipGrad (grad :/> gradt) = l2clipGrad grad :/> l2clipGrad gradt
+
+instance ClipGrad () where
+  l2clipGrad () = ()
+
+instance (ClipGrad a, ClipGrad b) => ClipGrad (a, b) where
+  l2clipGrad (l, r) = (l2clipGrad l, l2clipGrad r)
+
+instance (KnownNat i, KnownNat o) => ClipGrad (FullyConnected' i o) where
+  l2clipGrad (FullyConnected' wB wN) = FullyConnected' wB wN
 
 -- General purpose combinator
 type All :: (k -> Constraint) -> [k] -> Constraint
