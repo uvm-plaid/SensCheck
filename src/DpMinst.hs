@@ -14,8 +14,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE NoStarIsType #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoStarIsType #-}
 
 module DpMinst where
 
@@ -35,6 +35,7 @@ import Data.Singletons.Decide
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
+import GHC.Base (Type)
 import GHC.Generics ((:+:) (L1))
 import GHC.TypeLits
 import GHC.TypeLits qualified as TL
@@ -48,31 +49,19 @@ import Primitives qualified as Solo
 import Privacy qualified as Solo
 import Sensitivity qualified as Solo
 import Prelude
-import GHC.Base (Type)
 
--- It's logistic regression!
---
--- This network is used to show how we can embed a Network as a layer in the larger MNIST
--- type.
 type FL i o =
   Network
     '[FullyConnected i o, Logit]
     '[ 'D1 i, 'D1 o, 'D1 o]
 
+-- More simple layer to work on
+type TestLayer = '[FullyConnected 1 1]
+
+-- Example with nested gradients
+type TestLayer2 = '[InceptionMini 28 28 1 5 9]
+
 -- The definition of our convolutional neural network.
--- In the type signature, we have a type level list of shapes which are passed between the layers.
--- One can see that the images we are inputing are two dimensional with 28 * 28 pixels.
-
--- It's important to keep the type signatures, as there's many layers which can "squeeze" into the gaps
--- between the shapes, so inference can't do it all for us.
-
--- With the mnist data from Kaggle normalised to doubles between 0 and 1, learning rate of 0.01 and 15 iterations,
--- this network should get down to about a 1.3% error rate.
---
--- /NOTE:/ This model is actually too complex for MNIST, and one should use the type given in the readme instead.
---         This one is just here to demonstrate Inception layers in use.
---
-
 type MNIST =
   Network Layers Shapes'
 
@@ -109,36 +98,8 @@ type Shapes' =
 
 type LastShape = Last Shapes'
 
-randomMnist :: MonadRandom m => m MNIST
-randomMnist = randomNetwork
-
-convTest :: Int -> FilePath -> FilePath -> LearningParameters -> ExceptT String IO ()
-convTest iterations trainFile validateFile rate = do
-  net0 <- lift randomMnist
-  trainData <- readMNIST trainFile
-  validateData <- readMNIST validateFile
-  lift $ foldM_ (runIteration trainData validateData) net0 [1 .. iterations]
- where
-  -- TODO train calls applyUpdate and backPropagate
-  -- Goal: Override those functions
-  trainEach rate' !network (i, o) = train rate' network i o
-
-  runIteration trainRows validateRows net i = do
-    let trained' = foldl' (trainEach (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
-    let res = fmap (\(rowP, rowL) -> (rowL,) $ runNet trained' rowP) validateRows
-    let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
-    print trained'
-    putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
-    return trained'
-
--- main :: ExceptT String IO ()
--- main = do
--- initialNetwork <- lift randomMnist
--- trainData <- readMNIST trainFile
--- TODO "run" convTestDP  with net0 trainData
-
 convTestDP ::
-  forall e iterations s. -- TODO add this back after layers shapes.
+  forall e iterations s layers shapes.
   (TL.KnownNat iterations) =>
   [LabeledInput Shapes'] ->
   Network Layers Shapes' ->
@@ -149,17 +110,6 @@ convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteratio
   runIteration trainRows i net = do
     let trained' = trainDP @e @s (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
     trained'
-
--- TODO do we need to override this?
--- backPropagate :: SingI (Last shapes)
---               => Network layers shapes
---               -> S (Head shapes)
---               -> S (Last shapes)
---               -> Gradients layers
--- backPropagate network input target =
---     let (tapes, output) = runNetwork network input
---         (grads, _)      = runGradient network tapes (output - target)
---     in  grads
 
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
@@ -173,7 +123,7 @@ type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 -- TODO override this to do DP things
 -- Update a network with new weights after training with an instance.
 trainDP ::
-  forall e s. -- TODO this was getting a bit too abstract. add this back later: layers shapes.
+  forall e s layers shapes.
   SingI (Last Shapes') =>
   LearningParameters ->
   Network Layers Shapes' ->
@@ -231,37 +181,23 @@ clippedGrad network trainRows =
   -- TODO at some point I will actually need to operate on the hmatrix representation
   l2clip :: Gradients Layers -> Gradients Layers
   l2clip = undefined -- TODO
+  -- SumListOfGrads is a type class with 2 instances.
+  -- We need to take a regular list of Gradients which is a type level list.
+  -- And output a *single* list of type level Gradients.
+  --
+  -- e.g. [ '[FullyConnected, Pad] ] to a '[FullyConnect, Pad]
+  --
+  -- Also we will just take the Gradient of each layer and add them.
+  -- Well to combine things you can use a Monoid and also a fold.
+  --
+  -- > fold [Gradient FullyConnected, Gradient FullyConnected]
+  -- Gradient FullyConnected
+  --
+  -- The first instance takes in a empty type level list of gradients.
+  -- Result is a
+  --
+  -- Credit to https://www.morrowm.com/ for helping me with this technique.
 
-heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
-heads ((grad1 :/> _) : t) = grad1 : heads t
-heads [] = []
-
--- Ditto but tail
-tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
-tails ((_ :/> gradt) : t) = gradt : tails t
-
--- I got these working :triumph_emoji:
-type TestLayer = '[FullyConnected 1 1]
-
--- Example with nested gradients
-type TestLayer2 = '[InceptionMini 28 28 1 5 9]
-
--- SumListOfGrads is a type class with 2 instances.
--- We need to take a regular list of Gradients which is a type level list.
--- And output a *single* list of type level Gradients.
---
--- e.g. [ '[FullyConnected, Pad] ]to a '[FullyConnect, Pad]
---
--- Also we will just take the Gradient of each layer and add them.
--- Well to combine things you can use a Monoid and also a fold.
---
--- > fold [Gradient FullyConnected, Gradient FullyConnected]
--- Gradient FullyConnected
---
--- The first instance takes in a empty type level list of gradients.
--- Result is a
---
--- Credit to https://www.morrowm.com/ for helping me with this technique.
 class SumListOfGrads layers where
   sumListOfGrads :: [Gradients layers] -> Gradients layers
 
@@ -275,6 +211,14 @@ instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) 
         (grad :: Gradient layer) = fold headsGrad
         (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
      in next
+
+heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
+heads ((grad1 :/> _) : t) = grad1 : heads t
+heads [] = []
+
+-- Ditto but tail
+tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
+tails ((_ :/> gradt) : t) = gradt : tails t
 
 instance Semigroup (Gradients '[]) where
   GNil <> GNil = GNil
@@ -349,24 +293,27 @@ instance
   ) =>
   Monoid (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  mempty ::
-    ( KnownNat channels
-    , KnownNat filters
-    , KnownNat kernelRows
-    , KnownNat kernelColumns
-    , KnownNat strideRows
-    , KnownNat strideColumns
-    ) =>
-    Convolution' channels filters kernelRows kernelColumns strideRows strideColumns
   mempty = Convolution' $ SA.matrix @(kernelRows * kernelColumns * channels) [0 .. 0]
 
--- TODO Gradient Concat is just a tuple
 instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
   (Concat x1 y1) <> (Concat x2 y2) = Concat (x1 <> x2) (y1 <> y2)
 
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
 
+-- General purpose combinator
+type All :: (k -> Constraint) -> [k] -> Constraint
+type family All c xs where
+  All _ '[] = ()
+  All c (x : xs) = (c x, All c xs)
+
+-- Have a constraint on all gradients
+type AllGradients :: (k -> Constraint) -> [k] -> Constraint
+type family AllGradients c xs where
+  AllGradients _ '[] = ()
+  AllGradients c (x : xs) = (c (Gradient x), All c xs)
+
+-- CLI stuff
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
 mnist' :: Parser MnistOpts
@@ -403,21 +350,24 @@ parseMNIST = do
   image <- maybe (fail "Parsed row was of an incorrect size") pure (fromStorable . V.fromList $ pixels)
   return (image, lab)
 
--- Might need this stuff?
--- General purpose combinator
-type All :: (k -> Constraint) -> [k] -> Constraint
-type family All c xs where
-  All _ '[] = ()
-  All c (x : xs) = (c x, All c xs)
+randomMnist :: MonadRandom m => m MNIST
+randomMnist = randomNetwork
 
--- Have a constraint on all gradients
-type AllGradients :: (k -> Constraint) -> [k] -> Constraint
-type family AllGradients c xs where
-  AllGradients _ '[] = ()
-  AllGradients c (x : xs) = (c (Gradient x), All c xs)
+convTest :: Int -> FilePath -> FilePath -> LearningParameters -> ExceptT String IO ()
+convTest iterations trainFile validateFile rate = do
+  net0 <- lift randomMnist
+  trainData <- readMNIST trainFile
+  validateData <- readMNIST validateFile
+  lift $ foldM_ (runIteration trainData validateData) net0 [1 .. iterations]
+ where
+  -- TODO train calls applyUpdate and backPropagate
+  -- Goal: Override those functions
+  trainEach rate' !network (i, o) = train rate' network i o
 
--- Constraint synonym
--- class Monoid (Gradient layer) => MonoidGradient layer
--- instance Monoid (Gradient layer) => MonoidGradient layer
-
--- sumListOfGrads :: forall layer layerTail. All MonoidGradient layers => [Gradients layers] -> Gradients layers
+  runIteration trainRows validateRows net i = do
+    let trained' = foldl' (trainEach (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
+    let res = fmap (\(rowP, rowL) -> (rowL,) $ runNet trained' rowP) validateRows
+    let res' = fmap (\(S1D label, S1D prediction) -> (maxIndex (SA.extract label), maxIndex (SA.extract prediction))) res
+    print trained'
+    putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
+    return trained'
