@@ -134,21 +134,10 @@ trainDP rate network trainRows = Solo.do
   -- TODO move this inside clipped grad
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
       gradSum = clippedGrad network sensitiveTrainRows
-  -- gradSumUnsafe = Solo.D_UNSAFE $ gradsToDouble $ unSGrad gradSum -- Turn this to a number?
-  noisyGrad <- laplaceGradients @e @s gradSum -- Who knows what will go here????
+  noisyGrad <- laplaceGradients @e @s gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
-  --  where
-  -- I am confused here.
-  -- Gradients is a list of Gradient
-  -- I do a destrucutre to get a single Gradient x
-  -- But Gradient is polymorphic on some x?
-  -- So how would I make it a Double?
-  -- getGradientMatrix :: Gradients Layers -> _
-  -- getGradientMatrix (gradient :/> gradientRest) = undefined
 
--- TODO reference this:
--- https://hackage.haskell.org/package/grenade-0.1.0/docs/src/Grenade-Core-Network.html#Network
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
 
 -- SHould return a non-sensitive Gradient
@@ -181,34 +170,36 @@ clippedGrad network trainRows =
   -- TODO at some point I will actually need to operate on the hmatrix representation
   l2clip :: Gradients Layers -> Gradients Layers
   l2clip = undefined -- TODO
-  -- SumListOfGrads is a type class with 2 instances.
-  -- We need to take a regular list of Gradients which is a type level list.
-  -- And output a *single* list of type level Gradients.
   --
-  -- e.g. [ '[FullyConnected, Pad] ] to a '[FullyConnect, Pad]
-  --
-  -- Also we will just take the Gradient of each layer and add them.
-  -- Well to combine things you can use a Monoid and also a fold.
-  --
-  -- > fold [Gradient FullyConnected, Gradient FullyConnected]
-  -- Gradient FullyConnected
-  --
-  -- The first instance takes in a empty type level list of gradients.
-  -- Result is a
-  --
-  -- Credit to https://www.morrowm.com/ for helping me with this technique.
 
-class SumListOfGrads layers where
+-- SumListOfGrads is a type class with 2 instances.
+-- We need to take a regular list of Gradients which is a type level list.
+-- And output a *single* list of type level Gradients.
+--
+-- e.g. [ '[FullyConnected, Pad] ] to a '[FullyConnect, Pad]
+--
+-- Also we will just take the Gradient of each layer and add them.
+-- Well to combine things you can use a Monoid and also a fold.
+--
+-- > fold [Gradient FullyConnected, Gradient FullyConnected]
+-- Gradient FullyConnected
+--
+-- The first instance takes in a empty type level list of gradients.
+-- Result is a
+--
+-- Credit to https://www.morrowm.com/ for helping me with this technique.
+
+class SumListOfClippedGrads layers where
   sumListOfGrads :: [Gradients layers] -> Gradients layers
 
-instance SumListOfGrads '[] where
+instance SumListOfClippedGrads '[] where
   sumListOfGrads _ = GNil
 
-instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfGrads layerTail) => SumListOfGrads (layer : layerTail) where
+instance (Monoid (Gradient layer), UpdateLayer layer, SumListOfClippedGrads layerTail) => SumListOfClippedGrads (layer : layerTail) where
   sumListOfGrads gradsl =
     let headsGrad = heads gradsl
         tailsGrad = tails gradsl
-        (grad :: Gradient layer) = fold headsGrad
+        (grad :: Gradient layer) = fold headsGrad -- TODO foldMap?
         (next :: Gradients (layer ': layerTail)) = grad :/> sumListOfGrads tailsGrad
      in next
 
@@ -228,12 +219,12 @@ instance Monoid (Gradients '[]) where
 
 -- This happens since there's nesting of Gradients.
 -- e.g. InceptionMini
-instance (SumListOfGrads (layer : layerTail)) => Semigroup (Gradients (layer : layerTail)) where
-  grad1 <> grad2 = sumListOfGrads [grad1, grad2]
+instance (Semigroup (Gradient layer), Semigroup (Gradients layerTail)) => Semigroup (Gradients (layer : layerTail)) where
+  (grad1 :/> grad1t) <> (grad2 :/> grad2t) = (grad1 <> grad2) :/> (grad1t <> grad2t)
 
-instance (SumListOfGrads (layer : layerTail)) => Monoid (Gradients (layer : layerTail)) where
+instance (Monoid (Gradient layer), Monoid (Gradients layerTail), UpdateLayer layer) => Monoid (Gradients (layer : layerTail)) where
   -- TODO not sure about this one
-  mempty = sumListOfGrads []
+  mempty = mempty :/> mempty
 
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
@@ -251,35 +242,6 @@ instance
   ) =>
   Semigroup (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  (<>) ::
-    ( KnownNat channels
-    , KnownNat filters
-    , KnownNat kernelRows
-    , KnownNat kernelColumns
-    , KnownNat strideRows
-    , KnownNat strideColumns
-    ) =>
-    Convolution'
-      channels
-      filters
-      kernelRows
-      kernelColumns
-      strideRows
-      strideColumns ->
-    Convolution'
-      channels
-      filters
-      kernelRows
-      kernelColumns
-      strideRows
-      strideColumns ->
-    Convolution'
-      channels
-      filters
-      kernelRows
-      kernelColumns
-      strideRows
-      strideColumns
   (Convolution' grad1) <> (Convolution' grad2) = Convolution' (grad1 + grad2)
 
 instance
@@ -300,6 +262,25 @@ instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
 
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
+
+class ClipGrad grad where
+  l2clip :: grad -> grad
+
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  , KnownNat (kernelRows * kernelColumns * channels)
+  ) =>
+  ClipGrad (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  l2clip (Convolution' grad) = undefined
+
+instance (ClipGrad x, ClipGrad y) => ClipGrad (Concat m x n y) where
+  l2clip (Concat c1 c2) = Concat (l2clip c1) (l2clip c2)
 
 -- General purpose combinator
 type All :: (k -> Constraint) -> [k] -> Constraint
