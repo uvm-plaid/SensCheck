@@ -18,8 +18,8 @@
 
 module DpMinst where
 
--- Code from example of MNIST: https://github.com/HuwCampbell/grenade/blob/master/examples/main/mnist.hs
--- However with DP TODO
+-- This is the differentially private version of the mnist example from Grenade:
+-- https://github.com/HuwCampbell/grenade/blob/master/examples/main/mnist.hs
 
 import Control.Applicative
 import Control.Monad
@@ -34,13 +34,18 @@ import Data.Singletons.Decide
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
+import Distance (l2clip)
 import GHC.Base (Type)
 import GHC.Generics ((:+:) (L1))
 import GHC.TypeLits
 import GHC.TypeLits qualified as TL
 import Grenade
 import Grenade.Utils.OneHot
-import Numeric.LinearAlgebra (maxIndex)
+import Numeric.LinearAlgebra (Normed (norm_2), maxIndex)
+import Numeric.LinearAlgebra qualified as LA
+import Numeric.LinearAlgebra qualified as Matrix
+import Numeric.LinearAlgebra.Data qualified as SAD
+import Numeric.LinearAlgebra.Static (R (..))
 import Numeric.LinearAlgebra.Static qualified as SA
 import Options.Applicative
 import Prelude.Singletons (Head, Last, SingI)
@@ -159,17 +164,16 @@ clippedGrad ::
 clippedGrad network trainRows =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
-      clippedGrads = l2clipGrad <$> grads
+      clipAmount = 1.0
       -- sum the gradients, column-wise, to get 1-sensitive val
-      gradSum = sumListOfGrads clippedGrads
+      gradSum = sumListOfGrads clipAmount grads
    in SGRAD_UNSAFE @Solo.L2 @_ @senv gradSum
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
-  -- TODO at some point I will actually need to operate on the hmatrix representation
-  l2clipGrad :: Gradients Layers -> Gradients Layers
-  l2clipGrad = undefined -- TODO
-  --
+
+-- TODO at some point I will actually need to operate on the hmatrix representation
+--
 
 -- SumListOfGrads is a type class with 2 instances.
 -- We need to take a regular list of Gradients which is a type level list.
@@ -189,18 +193,18 @@ clippedGrad network trainRows =
 -- Credit to https://www.morrowm.com/ for helping me with this technique.
 
 class SumListOfClippedGrads layers where
-  sumListOfGrads :: [Gradients layers] -> Gradients layers
+  sumListOfGrads :: ClipAmount -> [Gradients layers] -> Gradients layers
 
 instance SumListOfClippedGrads '[] where
-  sumListOfGrads _ = GNil
+  sumListOfGrads clipAmount _ = GNil
 
 instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer, SumListOfClippedGrads layerTail) => SumListOfClippedGrads (layer : layerTail) where
-  sumListOfGrads gradsl =
+  sumListOfGrads clipAmount gradsl =
     let headsGrad = heads gradsl
         tailsGrad = tails gradsl
         -- Collapse list of Gradient layer and then clip
-        (clippedGrad :: Gradient layer) = foldMap l2clipGrad headsGrad
-     in clippedGrad :/> sumListOfGrads tailsGrad
+        (clippedGrad :: Gradient layer) = foldMap (l2clipGrad clipAmount) headsGrad
+     in clippedGrad :/> sumListOfGrads clipAmount tailsGrad
 
 heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
 heads ((grad1 :/> _) : t) = grad1 : heads t
@@ -262,10 +266,12 @@ instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
 
+type ClipAmount = Double
+
 -- Clips gradients
 -- https://programming-dp.com/ch12.html?highlight=clipping#gradient-clipping
 class ClipGrad grad where
-  l2clipGrad :: grad -> grad
+  l2clipGrad :: ClipAmount -> grad -> grad
 
 instance
   ( KnownNat channels
@@ -278,27 +284,41 @@ instance
   ) =>
   ClipGrad (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
   where
-  l2clipGrad (Convolution' grad) = undefined
+  l2clipGrad clipAmount (Convolution' grad) = Convolution' $ l2clipMatrix grad clipAmount
+
+l2clipMatrix :: (KnownNat n, KnownNat m) => SA.L n m -> ClipAmount -> SA.L n m
+l2clipMatrix m clipAmount =
+  let norm = norm_2 m
+   in if norm > clipAmount
+        then SA.dmmap (\elem -> clipAmount * (elem / norm)) m
+        else m
+
+l2clipVector :: KnownNat n => SA.R n -> ClipAmount -> SA.R n
+l2clipVector v clipAmount =
+  let norm = norm_2 v
+   in if norm > clipAmount
+        then SA.dvmap (\elem -> clipAmount * (elem / norm)) v
+        else v
 
 instance (ClipGrad x, ClipGrad y) => ClipGrad (Concat m x n y) where
-  l2clipGrad (Concat c1 c2) = Concat (l2clipGrad c1) (l2clipGrad c2)
+  l2clipGrad clipAmount (Concat c1 c2) = Concat (l2clipGrad clipAmount c1) (l2clipGrad clipAmount c2)
 
 instance ClipGrad (Gradients '[]) where
-  l2clipGrad GNil = GNil
+  l2clipGrad _ GNil = GNil
 
 -- This happens since there's nesting of Gradients.
 -- e.g. InceptionMini
 instance (ClipGrad (Gradient layer), ClipGrad (Gradients layerTail)) => ClipGrad (Gradients (layer : layerTail)) where
-  l2clipGrad (grad :/> gradt) = l2clipGrad grad :/> l2clipGrad gradt
+  l2clipGrad clipAmount (grad :/> gradt) = l2clipGrad clipAmount grad :/> l2clipGrad clipAmount gradt
 
 instance ClipGrad () where
-  l2clipGrad () = ()
+  l2clipGrad clipAmount () = ()
 
 instance (ClipGrad a, ClipGrad b) => ClipGrad (a, b) where
-  l2clipGrad (l, r) = (l2clipGrad l, l2clipGrad r)
+  l2clipGrad clipAmount (l, r) = (l2clipGrad clipAmount l, l2clipGrad clipAmount r)
 
 instance (KnownNat i, KnownNat o) => ClipGrad (FullyConnected' i o) where
-  l2clipGrad (FullyConnected' wB wN) = FullyConnected' wB wN
+  l2clipGrad clipAmount (FullyConnected' wB wN) = FullyConnected' (l2clipVector wB clipAmount) (l2clipMatrix wN clipAmount)
 
 -- General purpose combinator
 type All :: (k -> Constraint) -> [k] -> Constraint

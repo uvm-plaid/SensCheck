@@ -68,3 +68,14 @@ l2dist x y = l2norm $ uncurry distance <$> zip x y
 -- TODO remove?
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
+
+-- This can be used to bound the L2 sensitivity of our gradients
+-- By clipping a vector/matrix to have a l2 norm with in clipAmount range
+-- Divide vector elementwise by the L2 norm
+-- The resulting vector has a L2 norm of 1
+l2clip :: (Traversable f, Floating n, Ord n) => f n -> n -> f n
+l2clip l clipAmount =
+  let norm = l2norm l
+   in if norm > clipAmount
+        then (\elem -> clipAmount * (elem / norm)) <$> l
+        else l
