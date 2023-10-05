@@ -136,7 +136,8 @@ trainDP ::
 trainDP rate network trainRows = Solo.do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   -- TODO move this inside clipped grad
-  let gradSum = clippedGrad network trainRows
+  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
+      gradSum = clippedGrad network sensitiveTrainRows
   noisyGrad <- laplaceGradients @e @s gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
@@ -154,16 +155,15 @@ newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE
 -- We are going to take a list of gradients and turn it into a single gradient
 -- Takes all the training examples and computes gradients
 -- Clips it
--- TODO remove nonpolymorphic Shapes'
+--
 clippedGrad ::
   forall senv.
   Network Layers Shapes' ->
-  [LabeledInput Shapes'] ->
-  SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradient
+  Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
+  SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradients
 clippedGrad network trainRows =
   -- For every training example, backpropagate and clip the gradients
-  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @senv $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
-      grads = oneGrad . unSTrainRow <$> Solo.unSList sensitiveTrainRows
+  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
       -- sum the gradients, column-wise, to get 1-sensitive val
       gradSum = sumListOfGrads clipAmount grads
