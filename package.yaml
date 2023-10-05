@@ -38,6 +38,7 @@ dependencies:
 - singletons
 - singletons-base
 
+
 default-extensions:
 - ImportQualifiedPost
 - TypeApplications

@@ -30,16 +30,17 @@ import Data.Foldable (fold)
 import Data.Kind (Constraint)
 import Data.List (foldl')
 import Data.List.Singletons (Tail)
+import Data.Proxy (Proxy (Proxy))
 import Data.Singletons.Decide
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
-import Distance (l2clip)
 import GHC.Base (Type)
 import GHC.Generics ((:+:) (L1))
 import GHC.TypeLits
 import GHC.TypeLits qualified as TL
 import Grenade
+import Grenade.Core.Shape (Sing (..))
 import Grenade.Utils.OneHot
 import Numeric.LinearAlgebra (Normed (norm_2), maxIndex)
 import Numeric.LinearAlgebra qualified as LA
@@ -48,10 +49,12 @@ import Numeric.LinearAlgebra.Data qualified as SAD
 import Numeric.LinearAlgebra.Static (R (..))
 import Numeric.LinearAlgebra.Static qualified as SA
 import Options.Applicative
-import Prelude.Singletons (Head, Last, SingI)
+import Prelude.Singletons (Head, Last, SingI (..))
 import Primitives qualified as Solo
 import Privacy qualified as Solo
 import Sensitivity qualified as Solo
+import Test.QuickCheck (Arbitrary (arbitrary), Gen)
+import Test.QuickCheck.Gen (oneof)
 import Prelude
 
 type FL i o =
@@ -118,6 +121,9 @@ convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteratio
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
+f :: LabeledInput Shapes'
+f = undefined
+
 -- Gradients refers to one actual gradient for a single training example
 -- [Gradients] or whatever the actual type is the whole Gradient
 -- Gradient is actually not a gradient
@@ -149,7 +155,26 @@ laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.Tru
 laplaceGradients gradient = undefined
 
 -- The training row
-newtype STrainRow (m :: Solo.NMetric) shapes (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
+newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
+instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
+  arbitrary = do
+    input <- randomOfShapeGen
+    label <- randomOfShapeGen
+    pure $ STRAINROW_UNSAFE (input, label)
+
+-- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size.
+randomOfShapeGen :: forall s. (SingI s) => Gen (S s)
+randomOfShapeGen = do
+  case (sing :: Sing s) of
+    D1Sing @x ->
+      let size = fromIntegral $ TL.natVal @x Proxy
+       in S1D . SA.fromList <$> replicateM size arbitrary
+    D2Sing @x @y ->
+      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
+       in S2D . SA.fromList <$> replicateM size arbitrary
+    D3Sing @x @y @z ->
+      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
+       in S3D . SA.fromList <$> replicateM size arbitrary
 
 -- THIS IS THE PIECE TO RUN SENSCHECK ON
 -- We are going to take a list of gradients and turn it into a single gradient

@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 
 module Distance where
 
 import Data.Matrix qualified as Matrix
+import DpMinst (Layers, SGradients, STrainRow (unSTrainRow), Shapes')
+import Grenade (S (S1D), Shape (..))
 import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 
@@ -36,6 +39,17 @@ instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
 -- TODO instance for Gradient using l2norm
+-- TODO make this more polymorphic later
+--
+instance Distance (STrainRow Disc Shapes' senv) where
+  distance a b =
+    let rowA = (unSTrainRow a)
+        x = case rowA of (S1D _, S1D _) -> undefined
+     in -- TODO this is going to be annoying
+        undefined
+
+instance Distance (SGradients L2 layers senv) where
+  distance = undefined
 
 -- TODO more instances.
 
@@ -68,14 +82,3 @@ l2dist x y = l2norm $ uncurry distance <$> zip x y
 -- TODO remove?
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m
-
--- This can be used to bound the L2 sensitivity of our gradients
--- By clipping a vector/matrix to have a l2 norm with in clipAmount range
--- Divide vector elementwise by the L2 norm
--- The resulting vector has a L2 norm of 1
-l2clip :: (Traversable f, Floating n, Ord n) => f n -> n -> f n
-l2clip l clipAmount =
-  let norm = l2norm l
-   in if norm > clipAmount
-        then (\elem -> clipAmount * (elem / norm)) <$> l
-        else l

@@ -5,16 +5,16 @@
 
 packages:
 - completed:
-    commit: 0e01175386523ac1176b48d024497ee16357f322
-    git: https://github.com/HuwCampbell/grenade.git
+    commit: 4bd210a77e49d38355334db2804769c38a9a8614
+    git: git@github.com:psilospore/grenade.git
     name: grenade
     pantry-tree:
-      sha256: fefc5b0b40d5532dd8f0d68dfc8ef1209554c2935dc181a0c9c28833213a7a52
+      sha256: 575ffaa369ff6f41243a29c9980a620ec0849ec4baee6204a6aa037df7b6433b
       size: 5500
     version: 0.1.0
   original:
-    commit: 0e01175386523ac1176b48d024497ee16357f322
-    git: https://github.com/HuwCampbell/grenade.git
+    commit: 4bd210a77e49d38355334db2804769c38a9a8614
+    git: git@github.com:psilospore/grenade.git
 snapshots:
 - completed:
     sha256: 9fa4bece7acfac1fc7930c5d6e24606004b09e80aa0e52e9f68b148201008db9
