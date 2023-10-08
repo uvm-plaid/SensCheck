@@ -1,12 +1,20 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Distance where
 
 import Data.Matrix qualified as Matrix
+import Data.Singletons (SingI (..))
 import DpMinst (Layers, SGradients, STrainRow (unSTrainRow), Shapes')
-import Grenade (S (S1D), Shape (..))
+import Grenade
+import Grenade.Core.Shape
+import Numeric.LinearAlgebra qualified as LA
+import Numeric.LinearAlgebra.Data qualified as LAD
+import Numeric.LinearAlgebra.Static (Sized (unwrap))
+import Numeric.LinearAlgebra.Static qualified as LAS
 import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 
@@ -40,13 +48,19 @@ instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
 
 -- TODO instance for Gradient using l2norm
 -- TODO make this more polymorphic later
---
-instance Distance (STrainRow Disc Shapes' senv) where
+-- ("hi", 3) ("hi", 3)
+instance Distance (STrainRow Disc shapes senv) where
   distance a b =
-    let rowA = (unSTrainRow a)
-        x = case rowA of (S1D _, S1D _) -> undefined
-     in -- TODO this is going to be annoying
-        undefined
+    let rowA = unSTrainRow a
+        rowB = unSTrainRow b
+        inputsAreEq = strainEq (fst rowA) (fst rowB)
+        labelsAreEq = strainEq (snd rowA) (snd rowB)
+     in if inputsAreEq && labelsAreEq then 0 else 1
+
+strainEq :: S shape -> S shape -> Bool
+strainEq (S1D x) (S1D y) = unwrap x == unwrap y
+strainEq (S2D x) (S2D y) = unwrap x == unwrap y
+strainEq (S3D x) (S3D y) = unwrap x == unwrap y
 
 instance Distance (SGradients L2 layers senv) where
   distance = undefined

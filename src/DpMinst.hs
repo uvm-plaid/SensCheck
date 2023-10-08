@@ -156,6 +156,7 @@ laplaceGradients gradient = undefined
 
 -- The training row
 newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
+
 instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
   arbitrary = do
     input <- randomOfShapeGen
