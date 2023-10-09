@@ -47,8 +47,6 @@ instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
 -- TODO instance for Gradient using l2norm
--- TODO make this more polymorphic later
--- ("hi", 3) ("hi", 3)
 instance Distance (STrainRow Disc shapes senv) where
   distance a b =
     let rowA = unSTrainRow a
@@ -63,7 +61,7 @@ strainEq (S2D x) (S2D y) = unwrap x == unwrap y
 strainEq (S3D x) (S3D y) = unwrap x == unwrap y
 
 instance Distance (SGradients L2 layers senv) where
-  distance = undefined
+  distance a b = undefined
 
 -- TODO more instances.
 

@@ -1,9 +1,9 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module TH where
 
@@ -16,6 +16,7 @@ import Data.Map qualified as M
 import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
 import Debug.Trace (trace)
+import Debug.Trace qualified as Debug
 import Distance qualified
 import GHC.Num qualified
 import Language.Haskell.TH
@@ -90,6 +91,9 @@ genQuickCheck parseSensitiveAST functionName = do
   statement <- [|quickCheck (withMaxSuccess 1000 $(pure $ VarE propName))|]
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
 
+-- Generate just the property
+-- In most cases you may wish to use genMainQuickCheck for convenience
+-- This might be useful if for example you want to pass arguments (that you might need IO for)
 genProp :: Name -> Q Dec
 genProp = genProp' defaultParseSensitiveASTs
 
@@ -104,8 +108,10 @@ genProp' parseSensitiveAST functionName = do
   -- Log parsing results
   when verbose $ liftIO $ putStrLn $ "Parsed types: " <> show typeAsts <> "\n-----"
   unless (null unparsedTypes) do
-    liftIO $ putStrLn $ "Warning: The following types were not parsed as sensitive types. " <>
-      "Please verify they are not sensitive types."
+    liftIO $
+      putStrLn $
+        "Warning: The following types were not parsed as sensitive types. "
+          <> "Please verify they are not sensitive types."
     liftIO $ putStrLn $ "Function: " <> show functionName <> "\n"
     liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Type(s):\n" <> pprint unparsedTypes <> "\n-----"
 
@@ -221,7 +227,7 @@ splitArgs typ = case typ of
   t -> [t]
 
 nameToBinaryOp :: Name -> Maybe (SensitiveAST -> SensitiveAST -> SensitiveAST)
-nameToBinaryOp name 
+nameToBinaryOp name
   | isInfixOf "+++" $ show name = pure Plus'
   | isInfixOf "JoinSens" $ show name = pure JoinSens'
   | isInfixOf "ScaleSens" $ show name = pure ScaleSens'
@@ -268,8 +274,10 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDist
               "Unable to find sensitivity environment: (" <> show se <> ") in distance map: " <> show senvToDistance
           Just [] ->
             fail $
-              "Unable to find sensitivity environment in distance map. Empty for given key: " <> show se <>
-                " in Map: " <> show senvToDistance
+              "Unable to find sensitivity environment in distance map. Empty for given key: "
+                <> show se
+                <> " in Map: "
+                <> show senvToDistance
           Just (GeneratedDistanceName distanceName : _) -> pure distanceName
       pure $ VarE distance
     Plus' se1 se2 -> do

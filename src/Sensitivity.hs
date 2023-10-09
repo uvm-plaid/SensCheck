@@ -48,7 +48,7 @@ type L1Pair = SPair L1 -- \$⊗$-pairs in Fuzz
 type L2Pair = SPair L2 -- Not in Fuzz
 type LInfPair = SPair LInf -- \$\&$-pairs in Fuzz
 
-newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
+newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]} deriving (Show)
 type L1List = SList L1 -- \$τ␣‹list›$ in Fuzz
 type L2List = SList L2 -- Not in Fuzz
 type LInfList = SList LInf -- \$τ␣‹alist›$ in Fuzz
@@ -131,6 +131,13 @@ instance (Arbitrary (stype1 senv), Arbitrary (stype2 senv)) => Arbitrary (SPair 
     s1 <- arbitrary @(stype1 senv)
     s2 <- arbitrary @(stype2 senv)
     pure $ P_UNSAFE (s1, s2)
+
+instance (forall senv. Arbitrary (innerType senv)) => Arbitrary (SList cmetric innerType s1) where
+  arbitrary = do
+    (Positive size) <- arbitrary @(Positive Int)
+    -- Generate a list of arbitrary elements of size row * col
+    elems <- replicateM size arbitrary
+    pure $ SList_UNSAFE elems
 
 -- Similar to SList we need a custom data type
 newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}

@@ -121,9 +121,6 @@ convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteratio
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
-f :: LabeledInput Shapes'
-f = undefined
-
 -- Gradients refers to one actual gradient for a single training example
 -- [Gradients] or whatever the actual type is the whole Gradient
 -- Gradient is actually not a gradient
@@ -143,7 +140,7 @@ trainDP rate network trainRows = Solo.do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   -- TODO move this inside clipped grad
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
-      gradSum = clippedGrad network sensitiveTrainRows
+      gradSum = clippedGrad sensitiveTrainRows network 
   noisyGrad <- laplaceGradients @e @s gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
@@ -155,13 +152,16 @@ laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.Tru
 laplaceGradients gradient = undefined
 
 -- The training row
-newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes}
+newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes} deriving (Show)
 
-instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
-  arbitrary = do
-    input <- randomOfShapeGen
-    label <- randomOfShapeGen
-    pure $ STRAINROW_UNSAFE (input, label)
+-- instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
+--   arbitrary = do
+--     input <- randomOfShapeGen
+--     label <- randomOfShapeGen
+--     pure $ STRAINROW_UNSAFE (input, label)
+
+instance Arbitrary (STrainRow Solo.Disc Shapes' s) where
+  arbitrary = undefined
 
 -- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size.
 randomOfShapeGen :: forall s. (SingI s) => Gen (S s)
@@ -184,10 +184,10 @@ randomOfShapeGen = do
 --
 clippedGrad ::
   forall senv.
-  Network Layers Shapes' ->
   Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
+  Network Layers Shapes' ->
   SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradients
-clippedGrad network trainRows =
+clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
