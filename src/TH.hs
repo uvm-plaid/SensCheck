@@ -50,7 +50,6 @@ instance Show (SensitiveAST -> SensitiveAST) where
   show :: (SensitiveAST -> SensitiveAST) -> String
   show f = "SensitiveAST -> SensitiveAST"
 
-
 -- Alias to represent types that are not sensitive for functions with mixed types
 -- It is possible that a user defined sensitive type may not be parsed correctly into a SensitiveAST
 -- In that case the user will need to alter their ParseSensitiveAST function

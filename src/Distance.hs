@@ -8,7 +8,6 @@ module Distance where
 
 import Data.Matrix qualified as Matrix
 import Data.Singletons (SingI (..))
-import DpMinst (Layers, SGradients, STrainRow (unSTrainRow), Shapes')
 import Grenade
 import Grenade.Core.Shape
 import Numeric.LinearAlgebra qualified as LA
@@ -45,25 +44,6 @@ instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
 
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
-
--- TODO instance for Gradient using l2norm
-instance Distance (STrainRow Disc shapes senv) where
-  distance a b =
-    let rowA = unSTrainRow a
-        rowB = unSTrainRow b
-        inputsAreEq = strainEq (fst rowA) (fst rowB)
-        labelsAreEq = strainEq (snd rowA) (snd rowB)
-     in if inputsAreEq && labelsAreEq then 0 else 1
-
-strainEq :: S shape -> S shape -> Bool
-strainEq (S1D x) (S1D y) = unwrap x == unwrap y
-strainEq (S2D x) (S2D y) = unwrap x == unwrap y
-strainEq (S3D x) (S3D y) = unwrap x == unwrap y
-
-instance Distance (SGradients L2 layers senv) where
-  distance a b = undefined
-
--- TODO more instances.
 
 -- Distance Functions
 

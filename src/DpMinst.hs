@@ -35,6 +35,8 @@ import Data.Singletons.Decide
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
+import Distance (Distance)
+import Distance qualified
 import GHC.Base (Type)
 import GHC.Generics ((:+:) (L1))
 import GHC.TypeLits
@@ -46,7 +48,7 @@ import Numeric.LinearAlgebra (Normed (norm_2), maxIndex)
 import Numeric.LinearAlgebra qualified as LA
 import Numeric.LinearAlgebra qualified as Matrix
 import Numeric.LinearAlgebra.Data qualified as SAD
-import Numeric.LinearAlgebra.Static (R (..))
+import Numeric.LinearAlgebra.Static (R (..), Sized (unwrap))
 import Numeric.LinearAlgebra.Static qualified as SA
 import Options.Applicative
 import Prelude.Singletons (Head, Last, SingI (..))
@@ -140,12 +142,16 @@ trainDP rate network trainRows = Solo.do
   -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
   -- TODO move this inside clipped grad
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
-      gradSum = clippedGrad sensitiveTrainRows network 
+      gradSum = clippedGrad sensitiveTrainRows network
   noisyGrad <- laplaceGradients @e @s gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
+
+-- instance Distance.Distance (SGradients Solo.L2 layers senv) where
+--   distance (SGRAD_UNSAFE GNil) (SGRAD_UNSAFE GNil) = undefined
+--   distance (SGRAD_UNSAFE (head1 :/> tail1)) (SGRAD_UNSAFE (head2 :/> tail2)) = undefined
 
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
@@ -154,14 +160,11 @@ laplaceGradients gradient = undefined
 -- The training row
 newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes} deriving (Show)
 
--- instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
---   arbitrary = do
---     input <- randomOfShapeGen
---     label <- randomOfShapeGen
---     pure $ STRAINROW_UNSAFE (input, label)
-
-instance Arbitrary (STrainRow Solo.Disc Shapes' s) where
-  arbitrary = undefined
+instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
+  arbitrary = do
+    input <- randomOfShapeGen
+    label <- randomOfShapeGen
+    pure $ STRAINROW_UNSAFE (input, label)
 
 -- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size.
 randomOfShapeGen :: forall s. (SingI s) => Gen (S s)
@@ -186,7 +189,7 @@ clippedGrad ::
   forall senv.
   Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
   Network Layers Shapes' ->
-  SGradients Solo.L2 Layers senv -- need SGradients or simpler rep of gradients
+  SGradients Solo.L2 Layers senv
 clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
@@ -197,9 +200,6 @@ clippedGrad trainRows network =
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
-
--- TODO at some point I will actually need to operate on the hmatrix representation
---
 
 -- SumListOfGrads is a type class with 2 instances.
 -- We need to take a regular list of Gradients which is a type level list.
@@ -232,6 +232,9 @@ instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer,
         (clippedGrad :: Gradient layer) = foldMap (l2clipGrad clipAmount) headsGrad
      in clippedGrad :/> sumListOfGrads clipAmount tailsGrad
 
+instance (Distance (Gradient layer), UpdateLayer layer, Distance (SGradients Solo.L2 layerTail senv)) => Distance (SGradients Solo.L2 (layer : layerTail) senv) where
+  distance _ _ = undefined
+
 heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
 heads ((grad1 :/> _) : t) = grad1 : heads t
 heads [] = []
@@ -257,6 +260,9 @@ instance (Monoid (Gradient layer), Monoid (Gradients layerTail), UpdateLayer lay
 
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
+
+instance (KnownNat i, KnownNat o) => Distance (FullyConnected' i o) where
+  distance (FullyConnected' wB wN) (FullyConnected' wB2 wN2) = undefined
 
 instance (KnownNat i, KnownNat o) => Monoid (FullyConnected' i o) where
   mempty = FullyConnected' (SA.vector [0 .. 0]) (SA.matrix [0 .. 0])
@@ -416,3 +422,17 @@ convTest iterations trainFile validateFile rate = do
     print trained'
     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
     return trained'
+
+-- TODO instance for Gradient using l2norm
+instance Distance (STrainRow Solo.Disc shapes senv) where
+  distance a b =
+    let rowA = unSTrainRow a
+        rowB = unSTrainRow b
+        inputsAreEq = strainEq (fst rowA) (fst rowB)
+        labelsAreEq = strainEq (snd rowA) (snd rowB)
+     in if inputsAreEq && labelsAreEq then 0 else 1
+
+strainEq :: S shape -> S shape -> Bool
+strainEq (S1D x) (S1D y) = unwrap x == unwrap y
+strainEq (S2D x) (S2D y) = unwrap x == unwrap y
+strainEq (S3D x) (S3D y) = unwrap x == unwrap y
