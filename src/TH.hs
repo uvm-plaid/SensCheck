@@ -187,8 +187,8 @@ defaultParseSensitiveASTs typ = do
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
 parseInnerSensitiveAST :: Type -> Maybe SensitiveAST
 parseInnerSensitiveAST typ = case typ of
-  (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
-  (LitT lit) -> pure (TyLit_ lit) 
+  (VarT name) -> Debug.trace ("VarT name: " <> show name) $ pure (SEnv_ name) -- base case captures SDouble s1
+  (LitT lit) -> Debug.trace ("LitT: " <> show lit) $ pure (TyLit_ lit)
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp

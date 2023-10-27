@@ -160,6 +160,19 @@ laplaceGradients gradient = undefined
 -- The training row
 newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes} deriving (Show)
 
+instance Distance (STrainRow Solo.Disc shapes senv) where
+  distance a b =
+    let rowA = unSTrainRow a
+        rowB = unSTrainRow b
+        inputsAreEq = strainEq (fst rowA) (fst rowB)
+        labelsAreEq = strainEq (snd rowA) (snd rowB)
+     in if inputsAreEq && labelsAreEq then 0 else 1
+
+strainEq :: S shape -> S shape -> Bool
+strainEq (S1D x) (S1D y) = unwrap x == unwrap y
+strainEq (S2D x) (S2D y) = unwrap x == unwrap y
+strainEq (S3D x) (S3D y) = unwrap x == unwrap y
+
 instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m shapes s) where
   arbitrary = do
     input <- randomOfShapeGen
@@ -232,7 +245,12 @@ instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer,
         (clippedGrad :: Gradient layer) = foldMap (l2clipGrad clipAmount) headsGrad
      in clippedGrad :/> sumListOfGrads clipAmount tailsGrad
 
+-- Recursive case
 instance (Distance (Gradient layer), UpdateLayer layer, Distance (SGradients Solo.L2 layerTail senv)) => Distance (SGradients Solo.L2 (layer : layerTail) senv) where
+  distance _ _ = undefined
+
+-- Base case
+instance Distance (SGradients Solo.L2 '[] senv) where
   distance _ _ = undefined
 
 heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
@@ -249,8 +267,8 @@ instance Semigroup (Gradients '[]) where
 instance Monoid (Gradients '[]) where
   mempty = GNil
 
--- This happens since there's nesting of Gradients.
--- e.g. InceptionMini
+-- The below instances handle nesting of Gradients in Gradients.
+-- e.g. InceptionMini has Gradients in it
 instance (Semigroup (Gradient layer), Semigroup (Gradients layerTail)) => Semigroup (Gradients (layer : layerTail)) where
   (grad1 :/> grad1t) <> (grad2 :/> grad2t) = (grad1 <> grad2) :/> (grad1t <> grad2t)
 
@@ -258,6 +276,14 @@ instance (Monoid (Gradient layer), Monoid (Gradients layerTail), UpdateLayer lay
   -- TODO not sure about this one
   mempty = mempty :/> mempty
 
+instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance (Gradients (layer : layerTail)) where
+  distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
+
+-- We will use this in distance metric for the whole gradient thing
+class FlattenGrad g where
+  flattenGrad :: a -> R i
+
+-- Gradient Layer Implementation
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
   (FullyConnected' wB wN) <> (FullyConnected' wB2 wN2) = FullyConnected' (wB + wB2) (wN + wN2)
 
@@ -292,11 +318,30 @@ instance
   where
   mempty = Convolution' $ SA.matrix @(kernelRows * kernelColumns * channels) [0 .. 0]
 
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  ) =>
+  Distance (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
+  where
+  distance (Convolution' grad1) (Convolution' grad2) = undefined
+
 instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
   (Concat x1 y1) <> (Concat x2 y2) = Concat (x1 <> x2) (y1 <> y2)
 
 instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
   mempty = Concat mempty mempty
+
+instance (Distance x, Distance y) => Distance (Concat m x n y) where
+  distance _ _ = undefined
+
+-- Hmm this might be bad maybe don't do the Gradient trick or provide the L1/L2 thing?
+instance Distance () where
+  distance () () = undefined
 
 type ClipAmount = Double
 
@@ -422,17 +467,3 @@ convTest iterations trainFile validateFile rate = do
     print trained'
     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
     return trained'
-
--- TODO instance for Gradient using l2norm
-instance Distance (STrainRow Solo.Disc shapes senv) where
-  distance a b =
-    let rowA = unSTrainRow a
-        rowB = unSTrainRow b
-        inputsAreEq = strainEq (fst rowA) (fst rowB)
-        labelsAreEq = strainEq (snd rowA) (snd rowB)
-     in if inputsAreEq && labelsAreEq then 0 else 1
-
-strainEq :: S shape -> S shape -> Bool
-strainEq (S1D x) (S1D y) = unwrap x == unwrap y
-strainEq (S2D x) (S2D y) = unwrap x == unwrap y
-strainEq (S3D x) (S3D y) = unwrap x == unwrap y
