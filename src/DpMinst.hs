@@ -288,8 +288,8 @@ instance (KnownNat i, KnownNat o, KnownNat (o * i), n ~ o + (o * i)) => FlattenG
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
 
 -- I don't think the linear algebra package provides this :(
-flattenMatrix :: (KnownNat i, KnownNat o) => SA.L i o -> R (i * o)
-flattenMatrix = _
+flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
+flattenMatrix = SA.fromList . concat . SAD.toLists . SA.unwrap
 
 -- Gradient Layer Implementation
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
