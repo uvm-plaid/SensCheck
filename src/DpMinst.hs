@@ -124,13 +124,6 @@ convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteratio
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
--- Gradients refers to one actual gradient for a single training example
--- [Gradients] or whatever the actual type is the whole Gradient
--- Gradient is actually not a gradient
-
--- TODO ideally all the unsafe stuff is in clipped grad
--- All the safe stuff will be in this function
--- TODO override this to do DP things
 -- Update a network with new weights after training with an instance.
 trainDP ::
   forall e s layers shapes.
@@ -140,8 +133,6 @@ trainDP ::
   [LabeledInput Shapes'] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network Layers Shapes')
 trainDP rate network trainRows = Solo.do
-  -- newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
-  -- TODO move this inside clipped grad
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
       gradSum = clippedGrad sensitiveTrainRows network
   noisyGrad <- laplaceGradients @e @s gradSum
@@ -149,10 +140,6 @@ trainDP rate network trainRows = Solo.do
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
-
--- instance Distance.Distance (SGradients Solo.L2 layers senv) where
---   distance (SGRAD_UNSAFE GNil) (SGRAD_UNSAFE GNil) = undefined
---   distance (SGRAD_UNSAFE (head1 :/> tail1)) (SGRAD_UNSAFE (head2 :/> tail2)) = undefined
 
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
@@ -194,11 +181,9 @@ randomOfShapeGen = do
       let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
        in S3D . SA.fromList <$> replicateM size arbitrary
 
--- THIS IS THE PIECE TO RUN SENSCHECK ON
 -- We are going to take a list of gradients and turn it into a single gradient
 -- Takes all the training examples and computes gradients
 -- Clips it
---
 clippedGrad ::
   forall senv.
   Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
@@ -287,7 +272,6 @@ class FlattenGrad a i | a -> i where
 instance (KnownNat i, KnownNat o, KnownNat (o * i), n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
 
--- I don't think the linear algebra package provides this :(
 flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
 flattenMatrix = SA.fromList . concat . SAD.toLists . SA.unwrap
 
