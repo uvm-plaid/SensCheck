@@ -4,6 +4,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
@@ -48,7 +49,7 @@ import Numeric.LinearAlgebra (Normed (norm_2), maxIndex)
 import Numeric.LinearAlgebra qualified as LA
 import Numeric.LinearAlgebra qualified as Matrix
 import Numeric.LinearAlgebra.Data qualified as SAD
-import Numeric.LinearAlgebra.Static (R (..), Sized (unwrap))
+import Numeric.LinearAlgebra.Static (R (..), Sized (unwrap), (#))
 import Numeric.LinearAlgebra.Static qualified as SA
 import Options.Applicative
 import Prelude.Singletons (Head, Last, SingI (..))
@@ -280,8 +281,15 @@ instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance
   distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
 
 -- We will use this in distance metric for the whole gradient thing
-class FlattenGrad g where
+class FlattenGrad a i | a -> i where
   flattenGrad :: a -> R i
+
+instance (KnownNat i, KnownNat o, KnownNat (o * i), n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
+  flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
+
+-- I don't think the linear algebra package provides this :(
+flattenMatrix :: (KnownNat i, KnownNat o) => SA.L i o -> R (i * o)
+flattenMatrix = _
 
 -- Gradient Layer Implementation
 instance (KnownNat i, KnownNat o) => Semigroup (FullyConnected' i o) where
