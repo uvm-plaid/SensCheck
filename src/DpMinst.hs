@@ -231,6 +231,20 @@ instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer,
         (clippedGrad :: Gradient layer) = foldMap (l2clipGrad clipAmount) headsGrad
      in clippedGrad :/> sumListOfGrads clipAmount tailsGrad
 
+-- TODO can I just skip the above step and implement flatten grad on the whole thing?
+-- I don't think so
+class FlattenGrads layers len | layers -> len where
+  flattenGrads :: Gradients layers -> R len
+  unflattenGrads :: R len -> Gradients layers
+
+instance FlattenGrads '[] 0 where
+  flattenGrads GNil = undefined -- TODO empty R
+  unflattenGrads = undefined
+
+instance (FlattenGrads layerTail lenTail, FlattenGrad (Gradient layer) lenHead, len ~ (lenHead + lenTail), KnownNat len, KnownNat lenHead, KnownNat lenTail) => FlattenGrads (layer : layerTail) len where
+  flattenGrads (grad :/> gradT) = (flattenGrad grad) # (flattenGrads gradT)
+  unflattenGrads = undefined
+
 -- Recursive case
 instance (Distance (Gradient layer), UpdateLayer layer, Distance (SGradients Solo.L2 layerTail senv)) => Distance (SGradients Solo.L2 (layer : layerTail) senv) where
   distance _ _ = undefined
@@ -266,11 +280,13 @@ instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance
   distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
 
 -- We will use this in distance metric for the whole gradient thing
-class FlattenGrad a i | a -> i where
-  flattenGrad :: a -> R i
+class FlattenGrad grad len | grad -> len where
+  flattenGrad :: grad -> R len
+  unflattenGrad :: R len -> grad
 
 instance (KnownNat i, KnownNat o, KnownNat (o * i), n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
+  unflattenGrad = undefined
 
 flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
 flattenMatrix = SA.fromList . concat . SAD.toLists . SA.unwrap
@@ -322,6 +338,21 @@ instance
   where
   distance (Convolution' grad1) (Convolution' grad2) = undefined
 
+instance
+  ( KnownNat channels
+  , KnownNat filters
+  , KnownNat kernelRows
+  , KnownNat kernelColumns
+  , KnownNat strideRows
+  , KnownNat strideColumns
+  , len ~ (kernelRows * kernelColumns * channels * filters)
+  , KnownNat len
+  ) =>
+  FlattenGrad (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns) len
+  where
+  flattenGrad (Convolution' grad) = flattenMatrix grad
+  unflattenGrad = undefined
+
 instance (Semigroup x, Semigroup y) => Semigroup (Concat m x n y) where
   (Concat x1 y1) <> (Concat x2 y2) = Concat (x1 <> x2) (y1 <> y2)
 
@@ -330,6 +361,10 @@ instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
 
 instance (Distance x, Distance y) => Distance (Concat m x n y) where
   distance _ _ = undefined
+
+instance (FlattenGrad x xn, FlattenGrad y yn, KnownNat cn, KnownNat xn, KnownNat yn, cn ~ (xn + yn)) => FlattenGrad (Concat m x n y) cn where
+  flattenGrad (Concat g1 g2) = flattenGrad g1 # flattenGrad g2
+  unflattenGrad = undefined
 
 -- Hmm this might be bad maybe don't do the Gradient trick or provide the L1/L2 thing?
 instance Distance () where
