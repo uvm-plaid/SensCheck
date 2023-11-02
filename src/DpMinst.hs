@@ -106,6 +106,10 @@ type Shapes' =
    , 'D1 10
    ]
 
+-- Test shape
+type TestShapes' =
+  '[ 'D2 1 1]
+
 type LastShape = Last Shapes'
 
 convTestDP ::
@@ -140,6 +144,7 @@ trainDP rate network trainRows = Solo.do
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
+newtype SGradients2 (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len}
 
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
@@ -200,6 +205,36 @@ clippedGrad trainRows network =
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
 
+-- We are going to take a list of gradients and turn it into a single gradient
+-- Takes all the training examples and computes gradients
+-- Clips it
+-- TODO remove references to test shapes
+clippedGrad2 ::
+  forall len shapes layers senv.
+  (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
+  Solo.SList Solo.L2 (STrainRow Solo.Disc shapes) senv ->
+  Network layers shapes ->
+  SGradients2 Solo.L2 len senv
+clippedGrad2 trainRows network =
+  -- For every training example, backpropagate and clip the gradients
+  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
+      clipAmount = 1.0
+      -- TODO Is the initial vector being all 0s ok?
+      -- clippedGrad = l2clipVector (foldr (+) (SA.konst 0) $ flattenGrads <$> grads) clipAmount
+      -- TODO make this work first
+      clippedGrad = l2clipVector (flattenGrads $ head grads) clipAmount
+   in SGRAD2_UNSAFE clippedGrad
+ where
+  -- Takes single training example and calculates the gradient for that training example
+  oneGrad (example, label) = backPropagate network example label
+
+testClippedGrad = clippedGrad2 @_ @TestShapes' @TestLayer
+
+-- We will use this in distance metric for the whole gradient thing
+class FlattenGrad grad len | grad -> len where
+  flattenGrad :: grad -> R len
+  unflattenGrad :: R len -> grad
+
 -- SumListOfGrads is a type class with 2 instances.
 -- We need to take a regular list of Gradients which is a type level list.
 -- And output a *single* list of type level Gradients.
@@ -231,8 +266,6 @@ instance (Monoid (Gradient layer), ClipGrad (Gradient layer), UpdateLayer layer,
         (clippedGrad :: Gradient layer) = foldMap (l2clipGrad clipAmount) headsGrad
      in clippedGrad :/> sumListOfGrads clipAmount tailsGrad
 
--- TODO can I just skip the above step and implement flatten grad on the whole thing?
--- I don't think so
 class FlattenGrads layers len | layers -> len where
   flattenGrads :: Gradients layers -> R len
   unflattenGrads :: R len -> Gradients layers
@@ -242,7 +275,7 @@ instance FlattenGrads '[] 0 where
   unflattenGrads = undefined
 
 instance (FlattenGrads layerTail lenTail, FlattenGrad (Gradient layer) lenHead, len ~ (lenHead + lenTail), KnownNat len, KnownNat lenHead, KnownNat lenTail) => FlattenGrads (layer : layerTail) len where
-  flattenGrads (grad :/> gradT) = (flattenGrad grad) # (flattenGrads gradT)
+  flattenGrads (grad :/> gradT) = flattenGrad grad # flattenGrads gradT
   unflattenGrads = undefined
 
 -- Recursive case
@@ -278,11 +311,6 @@ instance (Monoid (Gradient layer), Monoid (Gradients layerTail), UpdateLayer lay
 
 instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance (Gradients (layer : layerTail)) where
   distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
-
--- We will use this in distance metric for the whole gradient thing
-class FlattenGrad grad len | grad -> len where
-  flattenGrad :: grad -> R len
-  unflattenGrad :: R len -> grad
 
 instance (KnownNat i, KnownNat o, KnownNat (o * i), n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
