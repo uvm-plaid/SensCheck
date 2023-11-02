@@ -146,6 +146,14 @@ trainDP rate network trainRows = Solo.do
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
 newtype SGradients2 (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len}
 
+instance (KnownNat h) => Distance (SGradients2 Solo.L2 h senv) where
+  distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (SGrad <$> SAD.toList (SA.unwrap l)) (SGrad <$> SAD.toList (SA.unwrap l2))
+
+newtype SGrad = SGrad Double deriving (Show, Eq)
+
+instance Distance SGrad where
+  distance (SGrad d1) (SGrad d2) = Distance.discdist d1 d2 -- TODO which metric abs or disc?
+
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
 laplaceGradients gradient = undefined
@@ -209,10 +217,10 @@ clippedGrad trainRows network =
 -- Takes all the training examples and computes gradients
 -- Clips it
 clippedGrad2 ::
-  forall len shapes layers senv.
-  (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
-  Solo.SList Solo.L2 (STrainRow Solo.Disc shapes) senv ->
-  Network layers shapes ->
+  forall len senv. -- TODO shapes layers.
+  (KnownNat len, SingI (Last Shapes'), FlattenGrads Layers len) =>
+  Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
+  Network Layers Shapes' ->
   SGradients2 Solo.L2 len senv
 clippedGrad2 trainRows network =
   -- For every training example, backpropagate and clip the gradients
@@ -225,7 +233,7 @@ clippedGrad2 trainRows network =
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
 
-testClippedGrad = clippedGrad2 @_ @TestShapes' @TestLayer2
+-- testClippedGrad = clippedGrad2 @_ @TestShapes' @TestLayer2
 
 -- We will use this in distance metric for the whole gradient thing
 class FlattenGrad grad len | grad -> len where
@@ -267,8 +275,11 @@ class FlattenGrads layers len | layers -> len where
   flattenGrads :: Gradients layers -> R len
   unflattenGrads :: R len -> Gradients layers
 
+emptyVector :: R 0
+emptyVector = SA.konst 0
+
 instance FlattenGrads '[] 0 where
-  flattenGrads GNil = undefined -- TODO empty R
+  flattenGrads GNil = emptyVector
   unflattenGrads = undefined
 
 instance (FlattenGrads layerTail lenTail, FlattenGrad (Gradient layer) lenHead, len ~ (lenHead + lenTail), KnownNat lenHead, KnownNat lenTail) => FlattenGrads (layer : layerTail) len where
@@ -298,7 +309,7 @@ instance Monoid (Gradients '[]) where
   mempty = GNil
 
 instance FlattenGrad (Gradients '[]) 0 where
-  flattenGrad GNil = undefined
+  flattenGrad GNil = emptyVector
   unflattenGrad = undefined
 
 -- The below instances handle nesting of Gradients in Gradients.
@@ -408,7 +419,7 @@ instance Distance () where
   distance () () = undefined
 
 instance FlattenGrad () 0 where
-  flattenGrad = undefined
+  flattenGrad () = emptyVector
   unflattenGrad = undefined
 
 type ClipAmount = Double
