@@ -208,7 +208,6 @@ clippedGrad trainRows network =
 -- We are going to take a list of gradients and turn it into a single gradient
 -- Takes all the training examples and computes gradients
 -- Clips it
--- TODO remove references to test shapes
 clippedGrad2 ::
   forall len shapes layers senv.
   (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
@@ -220,15 +219,13 @@ clippedGrad2 trainRows network =
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
       -- TODO Is the initial vector being all 0s ok?
-      -- clippedGrad = l2clipVector (foldr (+) (SA.konst 0) $ flattenGrads <$> grads) clipAmount
-      -- TODO make this work first
-      clippedGrad = l2clipVector (flattenGrads $ head grads) clipAmount
+      clippedGrad = l2clipVector (foldr (+) (SA.konst 0) $ flattenGrads <$> grads) clipAmount
    in SGRAD2_UNSAFE clippedGrad
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
 
-testClippedGrad = clippedGrad2 @_ @TestShapes' @TestLayer
+testClippedGrad = clippedGrad2 @_ @TestShapes' @TestLayer2
 
 -- We will use this in distance metric for the whole gradient thing
 class FlattenGrad grad len | grad -> len where
@@ -274,7 +271,7 @@ instance FlattenGrads '[] 0 where
   flattenGrads GNil = undefined -- TODO empty R
   unflattenGrads = undefined
 
-instance (FlattenGrads layerTail lenTail, FlattenGrad (Gradient layer) lenHead, len ~ (lenHead + lenTail), KnownNat len, KnownNat lenHead, KnownNat lenTail) => FlattenGrads (layer : layerTail) len where
+instance (FlattenGrads layerTail lenTail, FlattenGrad (Gradient layer) lenHead, len ~ (lenHead + lenTail), KnownNat lenHead, KnownNat lenTail) => FlattenGrads (layer : layerTail) len where
   flattenGrads (grad :/> gradT) = flattenGrad grad # flattenGrads gradT
   unflattenGrads = undefined
 
@@ -300,6 +297,10 @@ instance Semigroup (Gradients '[]) where
 instance Monoid (Gradients '[]) where
   mempty = GNil
 
+instance FlattenGrad (Gradients '[]) 0 where
+  flattenGrad GNil = undefined
+  unflattenGrad = undefined
+
 -- The below instances handle nesting of Gradients in Gradients.
 -- e.g. InceptionMini has Gradients in it
 instance (Semigroup (Gradient layer), Semigroup (Gradients layerTail)) => Semigroup (Gradients (layer : layerTail)) where
@@ -308,6 +309,10 @@ instance (Semigroup (Gradient layer), Semigroup (Gradients layerTail)) => Semigr
 instance (Monoid (Gradient layer), Monoid (Gradients layerTail), UpdateLayer layer) => Monoid (Gradients (layer : layerTail)) where
   -- TODO not sure about this one
   mempty = mempty :/> mempty
+
+instance (FlattenGrad (Gradient layer) headLen, FlattenGrad (Gradients layerTail) tailLen, len ~ (headLen + tailLen), KnownNat tailLen, KnownNat headLen) => FlattenGrad (Gradients (layer : layerTail)) len where
+  flattenGrad (grad :/> gradt) = flattenGrad grad # flattenGrad gradt
+  unflattenGrad = undefined
 
 instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance (Gradients (layer : layerTail)) where
   distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
@@ -390,13 +395,21 @@ instance (Monoid x, Monoid y) => Monoid (Concat m x n y) where
 instance (Distance x, Distance y) => Distance (Concat m x n y) where
   distance _ _ = undefined
 
-instance (FlattenGrad x xn, FlattenGrad y yn, KnownNat cn, KnownNat xn, KnownNat yn, cn ~ (xn + yn)) => FlattenGrad (Concat m x n y) cn where
+instance (FlattenGrad leftGrad leftLen, FlattenGrad rightGrad rightLen, KnownNat leftLen, KnownNat rightLen, len ~ (leftLen + rightLen)) => FlattenGrad (Concat m leftGrad n rightGrad) len where
   flattenGrad (Concat g1 g2) = flattenGrad g1 # flattenGrad g2
+  unflattenGrad = undefined
+
+instance (FlattenGrad leftGrad leftLen, FlattenGrad rightGrad rightLen, KnownNat leftLen, KnownNat rightLen, len ~ (leftLen + rightLen)) => FlattenGrad (leftGrad, rightGrad) len where
+  flattenGrad (g1, g2) = flattenGrad g1 # flattenGrad g2
   unflattenGrad = undefined
 
 -- Hmm this might be bad maybe don't do the Gradient trick or provide the L1/L2 thing?
 instance Distance () where
   distance () () = undefined
+
+instance FlattenGrad () 0 where
+  flattenGrad = undefined
+  unflattenGrad = undefined
 
 type ClipAmount = Double
 

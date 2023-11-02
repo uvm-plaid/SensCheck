@@ -29,14 +29,14 @@ f = add_dependently_typed_matrix_solo @2 @4
  )
 -}
 $( do
-    x <- genProp 'DpMinst.clippedGrad
+    x <- genProp 'DpMinst.clippedGrad2
     pure [x]
  )
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
   -- TODO fix the ordering bug so I don't need to curry
-  quickCheck $ withMaxSuccess 10000 (\sl1 sl2 -> clippedGrad_prop sl1 sl2 net0)
+  quickCheck $ withMaxSuccess 10000 (\sl1 sl2 -> clippedGrad2_prop sl1 sl2 net0)
 
 -- $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
