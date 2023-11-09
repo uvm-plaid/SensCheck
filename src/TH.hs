@@ -187,8 +187,8 @@ defaultParseSensitiveASTs typ = do
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
 parseInnerSensitiveAST :: Type -> Maybe SensitiveAST
 parseInnerSensitiveAST typ = case typ of
-  (VarT name) -> Debug.trace ("VarT name: " <> show name) $ pure (SEnv_ name) -- base case captures SDouble s1
-  (LitT lit) -> Debug.trace ("LitT: " <> show lit) $ pure (TyLit_ lit)
+  (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
+  (LitT lit) -> pure (TyLit_ lit)
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp
@@ -236,6 +236,7 @@ nameToBinaryOp name
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
 newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, Ord)
 
+-- TODO to debug I could print input1 and input2 and if the distance is 0 between inputs they should be the same
 -- Generates distance statement
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
 genDistanceStatement :: SensitiveAST -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
@@ -260,7 +261,7 @@ genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: SensitiveAST -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
+genPropertyStatement ast senvToDistance = [e|Debug.trace ("dout: " <> show dout <> "<= " <> show $(computeRhs ast senvToDistance)) $ dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
  where
   computeRhs :: SensitiveAST -> SEnvToDistance -> Q Exp
   computeRhs sexp senvToDistance = case sexp of

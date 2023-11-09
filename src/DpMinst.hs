@@ -36,6 +36,7 @@ import Data.Singletons.Decide
 import Data.Text qualified as T
 import Data.Text.IO qualified as T
 import Data.Vector.Storable qualified as V
+import Debug.Trace qualified as Debug
 import Distance (Distance)
 import Distance qualified
 import GHC.Base (Type)
@@ -55,6 +56,7 @@ import Options.Applicative
 import Prelude.Singletons (Head, Last, SingI (..))
 import Primitives qualified as Solo
 import Privacy qualified as Solo
+import Sensitivity (SDouble (D_UNSAFE))
 import Sensitivity qualified as Solo
 import Test.QuickCheck (Arbitrary (arbitrary), Gen)
 import Test.QuickCheck.Gen (oneof)
@@ -112,6 +114,15 @@ type TestShapes' =
 
 type LastShape = Last Shapes'
 
+-- test0Inputs = do
+--   -- Still make a random network but it will be the same network for both calls
+--   net0 <- evalRandIO randomMnist
+--   let zerodLabels = zeroedOfShape
+--       zerodOutputs = zeroedOfShape
+--       trainingRows = STRAINROW_UNSAFE (zerodLabels, zerodOutputs)
+--       grads1 = clippedGrad2 trainingRows net0
+--   putStrLn $ show grads1
+
 convTestDP ::
   forall e iterations s layers shapes.
   (TL.KnownNat iterations) =>
@@ -138,21 +149,16 @@ trainDP ::
   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network Layers Shapes')
 trainDP rate network trainRows = Solo.do
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L2 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @Shapes' <$> trainRows
-      gradSum = clippedGrad sensitiveTrainRows network
+      gradSum = clippedGrad sensitiveTrainRows network -- TODO change this to work on clippedgrad2
   noisyGrad <- laplaceGradients @e @s gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) (grads :: [Type]) (s :: Solo.SEnv) = SGRAD_UNSAFE {unSGrad :: Gradients grads}
-newtype SGradients2 (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len}
+newtype SGradients2 (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len} deriving (Show)
 
 instance (KnownNat h) => Distance (SGradients2 Solo.L2 h senv) where
-  distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (SGrad <$> SAD.toList (SA.unwrap l)) (SGrad <$> SAD.toList (SA.unwrap l2))
-
-newtype SGrad = SGrad Double deriving (Show, Eq)
-
-instance Distance SGrad where
-  distance (SGrad d1) (SGrad d2) = Distance.discdist d1 d2 -- TODO which metric abs or disc?
+  distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l)) (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l2))
 
 -- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s. SGradients Solo.L2 Layers s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients Layers)
@@ -167,7 +173,7 @@ instance Distance (STrainRow Solo.Disc shapes senv) where
         rowB = unSTrainRow b
         inputsAreEq = strainEq (fst rowA) (fst rowB)
         labelsAreEq = strainEq (snd rowA) (snd rowB)
-     in if inputsAreEq && labelsAreEq then 0 else 1
+     in Debug.traceShow (rowA, rowB) $ if inputsAreEq && labelsAreEq then 0 else 1
 
 strainEq :: S shape -> S shape -> Bool
 strainEq (S1D x) (S1D y) = unwrap x == unwrap y
@@ -194,6 +200,20 @@ randomOfShapeGen = do
       let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
        in S3D . SA.fromList <$> replicateM size arbitrary
 
+-- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size. But zeroed out.
+zeroedOfShape :: forall s. (SingI s) => S s
+zeroedOfShape = do
+  case (sing :: Sing s) of
+    D1Sing @x ->
+      let size = fromIntegral $ TL.natVal @x Proxy
+       in S1D . SA.fromList $ replicate size 0
+    D2Sing @x @y ->
+      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
+       in S2D . SA.fromList $ replicate size 0
+    D3Sing @x @y @z ->
+      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
+       in S3D . SA.fromList $ replicate size 0
+
 -- We are going to take a list of gradients and turn it into a single gradient
 -- Takes all the training examples and computes gradients
 -- Clips it
@@ -219,16 +239,15 @@ clippedGrad trainRows network =
 clippedGrad2 ::
   forall len senv. -- TODO shapes layers.
   (KnownNat len, SingI (Last Shapes'), FlattenGrads Layers len) =>
-  Solo.SList Solo.L2 (STrainRow Solo.Disc Shapes') senv ->
+  Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv ->
   Network Layers Shapes' ->
   SGradients2 Solo.L2 len senv
 clippedGrad2 trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
-      -- TODO Is the initial vector being all 0s ok?
-      clippedGrad = l2clipVector (foldr (+) (SA.konst 0) $ flattenGrads <$> grads) clipAmount
-   in SGRAD2_UNSAFE clippedGrad
+      clippedGrad = foldr (+) (SA.konst 0) $ (\v -> l2clipVector (flattenGrads v) clipAmount) <$> grads
+   in Debug.traceShow (SGRAD2_UNSAFE clippedGrad) $ SGRAD2_UNSAFE clippedGrad
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label

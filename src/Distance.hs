@@ -32,6 +32,9 @@ instance Distance (SDouble Disc senv) where
 instance Distance (stype senv) => Distance (SList L2 stype senv) where
   distance (SList_UNSAFE a) (SList_UNSAFE b) = l2dist a b
 
+instance Distance (stype senv) => Distance (SList L1 stype senv) where
+  distance (SList_UNSAFE a) (SList_UNSAFE b) = l1dist a b
+
 -- For 2 tuples with elements: (a_1, b_1) and (a_2, b_2)
 -- We need to take the following distances
 -- d(d(a_1, a_2), d(b_1, b_2))
