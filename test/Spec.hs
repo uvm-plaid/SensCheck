@@ -9,7 +9,7 @@ import Control.Monad
 import Control.Monad.Random
 import Debug.Trace qualified as Debug
 import Distance
-import DpMinst (randomMnist, testZeros, SGradients (..), flattenGrads)
+import DpMinst (randomMnist, testZeros, SGradients (..), flattenGrads, testHMatrixFoldr)
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
@@ -47,8 +47,19 @@ main :: IO ()
 main = do
   putStrLn "\n\nThese tests are expected to pass:"
   sensCheckDPClippedGrad
+  testHMatrixALot
   --  tests
   putStrLn "\n\n=================================="
 
 -- putStrLn "These tests are expected to fail:\n\n"
 -- failing_tests
+
+testHMatrixALot = do
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
+  testHMatrixFoldr
