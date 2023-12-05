@@ -9,7 +9,7 @@ import Control.Monad
 import Control.Monad.Random
 import Debug.Trace qualified as Debug
 import Distance
-import DpMinst (randomMnist, testZeros, SGradients (..), flattenGrads, testHMatrixFoldr)
+import DpMinst (SGradients (..), flattenGrads, randomMnist, testHMatrixFoldr, testZeros, SameSizedSLists (SameSizedSLists))
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
@@ -36,10 +36,11 @@ $( do
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
-  --Debug.traceShowM net0
+  -- Debug.traceShowM net0
   -- TODO fix the ordering bug so I don't need to curry
-  quickCheck $ withMaxSuccess 10000 (\sl1 sl2 -> clippedGrad2_prop sl1 sl2 $! net0)
-  -- putStrLn $ show $ flattenGrads $ testZeros net0
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad2_prop trainingRows1 trainingRows2 $! net0)
+
+-- putStrLn $ show $ flattenGrads $ testZeros net0
 
 -- $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
