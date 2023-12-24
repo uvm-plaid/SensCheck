@@ -9,7 +9,7 @@ import Control.Monad
 import Control.Monad.Random
 import Debug.Trace qualified as Debug
 import Distance
-import DpMinst (SGradients (..), flattenGrads, randomMnist, testHMatrixFoldr, testZeros, SameSizedSLists (SameSizedSLists))
+import DpMinst (SGradients (..), flattenGrads, randomMnist, SameSizedSLists (SameSizedSLists))
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
@@ -30,7 +30,7 @@ f = add_dependently_typed_matrix_solo @2 @4
  )
 -}
 $( do
-    x <- genProp 'DpMinst.clippedGrad2
+    x <- genProp 'DpMinst.clippedGrad
     pure [x]
  )
 
@@ -38,7 +38,7 @@ sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
   -- Debug.traceShowM net0
   -- TODO fix the ordering bug so I don't need to curry
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad2_prop trainingRows1 trainingRows2 $! net0)
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 $! net0)
 
 -- putStrLn $ show $ flattenGrads $ testZeros net0
 
@@ -48,19 +48,7 @@ main :: IO ()
 main = do
   putStrLn "\n\nThese tests are expected to pass:"
   sensCheckDPClippedGrad
-  testHMatrixALot
-  --  tests
   putStrLn "\n\n=================================="
 
 -- putStrLn "These tests are expected to fail:\n\n"
 -- failing_tests
-
-testHMatrixALot = do
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr

@@ -34,6 +34,7 @@ library
       PrivacyEps
       Rats
       Reals
+      Scripts
       Sensitivity
       Solo2
       StdLib

@@ -1,19 +1,14 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import Language.Haskell.TH
-import TH
-import DpMinst (testHMatrixFoldr)
+import Scripts
 
 
+x = $(hasSEnv)
 main :: IO ()
 main = do
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
-  testHMatrixFoldr
+  print x
   print "I don't do anything :). Run stack test instead."
 
