@@ -13,6 +13,9 @@ import Data.Coerce (coerce)
 import Data.List (isInfixOf, transpose)
 import Data.Map (Map)
 import Data.Map qualified as M
+import Data.Set qualified as Set
+import Data.Set (Set (..))
+import Data.Maybe (catMaybes)
 import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
 import Debug.Trace (trace)
@@ -31,6 +34,7 @@ import Sensitivity (
   SList,
   SMatrix,
  )
+import Data.Foldable (fold)
 import Sensitivity qualified
 
 -- Enable verbose logging
@@ -168,7 +172,9 @@ type ParseError = String
 -- Parses template haskell's AST and returns either a SensitiveAST or a template haskell type that failed to parse.
 -- The type can potentially be a sensitive type that the user should verify.
 -- TODO change this to Either Error SensitiveAST
-type ParseSensitiveAST = Type -> Maybe SensitiveAST
+type ParseSensitiveAST = SensitiveTypeParams -> Type -> Maybe SensitiveAST
+
+type SensitiveTypeParams = Set Name
 
 {-
 Matches TH AST to get the unparsed Sensitive Type ASTs.
@@ -176,24 +182,24 @@ This is a default instance. If a user creates a datatype that doesn't pattern ma
 Then they may implement their own SensitiveAST parser.
 -}
 defaultParseSensitiveASTs :: ParseSensitiveAST
-defaultParseSensitiveASTs typ = do
+defaultParseSensitiveASTs typeParams typ = do
   innerAST <- case typ of
     AppT _ innerAst ->
       Just innerAst
     _ -> Nothing
-  parseInnerSensitiveAST innerAST
+  parseInnerSensitiveAST typeParams innerAST
 
 -- Parses sensitive ast stripped of container value.
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
-parseInnerSensitiveAST :: Type -> Maybe SensitiveAST
-parseInnerSensitiveAST typ = case typ of
-  (VarT name) -> pure (SEnv_ name) -- base case captures SDouble s1
+parseInnerSensitiveAST :: SensitiveTypeParams -> Type -> Maybe SensitiveAST
+parseInnerSensitiveAST typeParams typ = case typ of
+  (VarT name) -> if Set.member name typeParams then pure (SEnv_ name) else Nothing
   (LitT lit) -> pure (TyLit_ lit)
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp
-    term1 <- parseInnerSensitiveAST t1
-    term2 <- parseInnerSensitiveAST t2
+    term1 <- parseInnerSensitiveAST typeParams t1
+    term2 <- parseInnerSensitiveAST typeParams t2
     Just $ binaryOp term1 term2
   _ -> Nothing
 
@@ -202,23 +208,50 @@ parseInnerSensitiveAST typ = case typ of
 parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
 parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
+  sensitiveTypeParams = Debug.traceShow (collectSEnvTypeParams typ) (collectSEnvTypeParams typ)
   splitTypes = splitArgs (stripForall typ)
   (unparsedTypes, sensAsts) =
     foldl
-      ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST x of
+      ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST sensitiveTypeParams x of
           Nothing -> (x : typeAcc, sensAstAcc)
           Just sensAst -> (typeAcc, sensAst : sensAstAcc)
       )
       ([] :: [Type], [] :: [SensitiveAST])
       splitTypes
 
+
+
 -- Remove Forall if found
 stripForall :: Type -> Type
 stripForall t = case t of
-  -- TODO for track KnownNat I need to get the constraint out of the forall
   ForallT _ _ t' -> t'
   t' -> t' -- else do nothing
 
+-- Collect Sensitive type params names
+collectSEnvTypeParams :: Type -> Set Name
+collectSEnvTypeParams type_ = case type_ of
+  ForallT typeParams _ _ -> fold (\case
+      -- TODO better way for checking if name is the same?
+      -- TODO maybe do a ++
+      KindedTV name _ (ConT kind) -> if show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" then Set.singleton name else Set.empty
+      -- TODO t1 is not a name so I need to somehow dig in and get the name?
+      (AppT t1 (ConT kind)) -> if show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" then Set.singleton _ else Set.empty
+      -- More likely to be in t2. I'm not sure if it will ever appear in t1.
+      (AppT t1 t2) -> appT t2 || appT t1
+      _ -> Set.empty
+    ) <$> typeParams
+  t' -> Set.empty
+  where
+    -- Search through AppT
+    -- TODO make this return a Set
+    -- TODO actually generalize this to above
+    appT t =
+      case t of
+        -- TODO t1 is not a name
+        (AppT t1 (ConT kind)) -> show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" || appT t1
+        -- More likely to be in t2. I'm not sure if it will ever appear in t1.
+        (AppT t1 t2) -> appT t2 || appT t1
+        _ -> False -- Maybe search through other cases?
 -- Split when encountering ->
 splitArgs :: Type -> [Type]
 splitArgs typ = case typ of

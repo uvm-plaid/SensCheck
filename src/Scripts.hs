@@ -1,0 +1,54 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+
+module Scripts where
+
+import Language.Haskell.TH
+import AnnotatedExternalLibrary
+import qualified Sensitivity
+import qualified DpMinst
+import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
+import Debug.Trace
+
+-- Split when encountering ->
+splitArgs :: Type -> [Type]
+splitArgs typ = case typ of
+  AppT (AppT ArrowT t1) t2 -> splitArgs t1 ++ splitArgs t2
+  t -> [t]
+
+-- Remove Forall if found
+stripForall :: Type -> Type
+stripForall t = case t of
+  -- TODO for track KnownNat I need to get the constraint out of the forall
+  ForallT _ _ t' -> t'
+  t' -> t' -- else do nothing
+
+
+hasSEnv = do
+    t <- reifyType 'DpMinst.clippedGrad >>= resolveTypeSynonyms -- Maybe resolve type snonymns
+    stringE $ case t of
+      -- TODO looks like it also shows up in the 3rd argument after ContT kind
+      ForallT (_ : KindedTV name _ appT': _) _ t' -> traceShow t $ show $ appT appT'
+      l -> "nope " <> show t
+    -- stringE $ pprint $ head $ splitArgs t
+  where
+    -- Search through AppT
+    appT t =
+      case t of
+        (AppT t1 (ConT kind)) -> traceShow t1 $ show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" || appT t1
+        -- More likely to be in t2. I'm not sure if it will ever appear in t1.
+        (AppT t1 t2) -> appT t2 || appT t1
+        _ -> False -- Maybe search through other cases?
+ 
+-- hasSEnv2 = do
+--     t <- reifyType 'solo_plus-- Maybe resolve type snonymns
+--     stringE $ case t of
+--       -- TODO looks like it also shows up in the 3rd argument after ContT kind
+--       ForallT [KindedTV name _ (ConT kind), _] _ t' -> show $ show kind == "Sensitivity.SEnv"
+--       l -> "nope"
+      
+    -- stringE $ pprint $ head $ splitArgs t
