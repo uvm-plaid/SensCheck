@@ -38,7 +38,7 @@ sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
   -- Debug.traceShowM net0
   -- TODO fix the ordering bug so I don't need to curry
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 $! net0)
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 $! net0)
 
 -- putStrLn $ show $ flattenGrads $ testZeros net0
 
