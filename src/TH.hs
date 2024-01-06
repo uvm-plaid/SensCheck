@@ -204,14 +204,14 @@ parseInnerSensitiveAST typeParams typ = case typ of
   _ -> Nothing
 
 -- Parses Template Haskell AST to a list of simplified ASTs
--- SDouble Diff s -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2) into a list of ASTs
+-- SDouble Diff s -> SDouble Diff (s2 :: SEnv) -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
 parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
   sensitiveTypeParams = Debug.traceShow (collectSEnvTypeParams typ) (collectSEnvTypeParams typ)
   splitTypes = splitArgs (stripForall typ)
   (unparsedTypes, sensAsts) =
-    foldl
+    Debug.trace ("After collecting sensitive type params: " <> show sensitiveTypeParams) $ foldl
       ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST sensitiveTypeParams x of
           Nothing -> (x : typeAcc, sensAstAcc)
           Just sensAst -> (typeAcc, sensAst : sensAstAcc)
@@ -228,18 +228,17 @@ stripForall t = case t of
   t' -> t' -- else do nothing
 
 -- Collect Sensitive type params names
+-- TODO there might be multiple
 collectSEnvTypeParams :: Type -> Set Name
 collectSEnvTypeParams type_ = case type_ of
-  ForallT typeParams _ _ -> fold (\case
+  ForallT typeParams _ _ -> foldr (\t acc -> case t of
       -- TODO better way for checking if name is the same?
       -- TODO maybe do a ++
-      KindedTV name _ (ConT kind) -> if show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" then Set.singleton name else Set.empty
-      -- TODO t1 is not a name so I need to somehow dig in and get the name?
-      (AppT t1 (ConT kind)) -> if show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" then Set.singleton _ else Set.empty
-      -- More likely to be in t2. I'm not sure if it will ever appear in t1.
-      (AppT t1 t2) -> appT t2 || appT t1
-      _ -> Set.empty
-    ) <$> typeParams
+      KindedTV name _ (ConT kind) -> if isSensitive kind then acc <> Set.singleton name else acc
+      -- TODO ignore the name here? Use the one under?
+      KindedTV name _ t' -> if appT t' then acc <> Set.singleton name else Set.empty
+      _ -> acc
+    ) Set.empty (Set.fromList typeParams)
   t' -> Set.empty
   where
     -- Search through AppT
@@ -247,11 +246,13 @@ collectSEnvTypeParams type_ = case type_ of
     -- TODO actually generalize this to above
     appT t =
       case t of
-        -- TODO t1 is not a name
-        (AppT t1 (ConT kind)) -> show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" || appT t1
+        (AppT t1 (ConT kind)) -> isSensitive kind || appT t1
         -- More likely to be in t2. I'm not sure if it will ever appear in t1.
         (AppT t1 t2) -> appT t2 || appT t1
-        _ -> False -- Maybe search through other cases?
+        _ -> False
+    isSensitive :: Name -> Bool
+    isSensitive name = show name == "Sensitivity.SEnv" || show name == "Sensitivity.Sensitivity"
+
 -- Split when encountering ->
 splitArgs :: Type -> [Type]
 splitArgs typ = case typ of

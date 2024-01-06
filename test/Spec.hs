@@ -19,7 +19,7 @@ import Utils
 
 f = add_dependently_typed_matrix_solo @2 @4
 
-{- $( genMainQuickCheck
+$( genMainQuickCheck
     "tests"
     [ 'solo_plus
     , 'add_pair_solo
@@ -28,7 +28,7 @@ f = add_dependently_typed_matrix_solo @2 @4
     , 'solo_mixed_types_mult
     ]
  )
--}
+
 $( do
     x <- genProp 'DpMinst.clippedGrad
     pure [x]
@@ -42,13 +42,14 @@ sensCheckDPClippedGrad = do
 
 -- putStrLn $ show $ flattenGrads $ testZeros net0
 
--- $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
+$(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
 main :: IO ()
 main = do
   putStrLn "\n\nThese tests are expected to pass:"
+  -- tests
   sensCheckDPClippedGrad
   putStrLn "\n\n=================================="
 
--- putStrLn "These tests are expected to fail:\n\n"
--- failing_tests
+  putStrLn "These tests are expected to fail:\n\n"
+  -- failing_tests

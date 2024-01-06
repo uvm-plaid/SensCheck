@@ -28,8 +28,8 @@ stripForall t = case t of
   t' -> t' -- else do nothing
 
 
-hasSEnv = do
-    t <- reifyType 'DpMinst.clippedGrad >>= resolveTypeSynonyms -- Maybe resolve type snonymns
+hasSEnv name = do
+    t <- reifyType name >>= resolveTypeSynonyms -- Maybe resolve type snonymns
     stringE $ case t of
       -- TODO looks like it also shows up in the 3rd argument after ContT kind
       ForallT (_ : KindedTV name _ appT': _) _ t' -> traceShow t $ show $ appT appT'
