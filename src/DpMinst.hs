@@ -102,22 +102,13 @@ type TestShapes' =
 
 type LastShape = Last Shapes'
 
--- test0Inputs = do
---   -- Still make a random network but it will be the same network for both calls
---   net0 <- evalRandIO randomMnist
---   let zerodLabels = zeroedOfShape
---       zerodOutputs = zeroedOfShape
---       trainingRows = STRAINROW_UNSAFE (zerodLabels, zerodOutputs)
---       grads1 = clippedGrad2 trainingRows net0
---   putStrLn $ show grads1
-
 convTestDP ::
   forall e iterations s layers shapes len.
   (TL.KnownNat iterations, SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
   [LabeledInput shapes] ->
   Network layers shapes ->
   LearningParameters ->
-  Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes) -- ExceptT String IO ()
+  Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes)
 convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
  where
   runIteration trainRows i net = do
@@ -280,18 +271,6 @@ instance
   , KnownNat kernelColumns
   , KnownNat strideRows
   , KnownNat strideColumns
-  ) =>
-  Distance (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
-  where
-  distance (Convolution' grad1) (Convolution' grad2) = undefined
-
-instance
-  ( KnownNat channels
-  , KnownNat filters
-  , KnownNat kernelRows
-  , KnownNat kernelColumns
-  , KnownNat strideRows
-  , KnownNat strideColumns
   , len ~ (kernelRows * kernelColumns * channels * filters)
   , KnownNat len
   ) =>
@@ -310,10 +289,6 @@ instance (FlattenGrad leftGrad leftLen, FlattenGrad rightGrad rightLen, KnownNat
 instance (FlattenGrad leftGrad leftLen, FlattenGrad rightGrad rightLen, KnownNat leftLen, KnownNat rightLen, len ~ (leftLen + rightLen)) => FlattenGrad (leftGrad, rightGrad) len where
   flattenGrad (g1, g2) = flattenGrad g1 # flattenGrad g2
   unflattenGrad = undefined
-
--- Hmm this might be bad maybe don't do the Gradient trick or provide the L1/L2 thing?
-instance Distance () where
-  distance () () = undefined
 
 instance FlattenGrad () 0 where
   flattenGrad () = emptyVector
@@ -373,18 +348,6 @@ instance (ClipGrad a, ClipGrad b) => ClipGrad (a, b) where
 instance (KnownNat i, KnownNat o) => ClipGrad (FullyConnected' i o) where
   l2clipGrad clipAmount (FullyConnected' wB wN) = FullyConnected' (l2clipVector wB clipAmount) (l2clipMatrix wN clipAmount)
 
--- General purpose combinator
-type All :: (k -> Constraint) -> [k] -> Constraint
-type family All c xs where
-  All _ '[] = ()
-  All c (x : xs) = (c x, All c xs)
-
--- Have a constraint on all gradients
-type AllGradients :: (k -> Constraint) -> [k] -> Constraint
-type family AllGradients c xs where
-  AllGradients _ '[] = ()
-  AllGradients c (x : xs) = (c (Gradient x), All c xs)
-
 -- CLI stuff
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
 
@@ -442,6 +405,7 @@ parseMNIST = do
 --     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
 --     return trained'
 
+-- Useful for generating lists of the same size with quickcheck
 data SameSizedSLists m t senv = SameSizedSLists (Solo.SList m t senv) (Solo.SList m t senv) deriving (Show)
 
 -- Have quickcheck generate lists of the same size
