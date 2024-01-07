@@ -59,6 +59,7 @@ import Sensitivity (SDouble (D_UNSAFE), SList (SList_UNSAFE))
 import Sensitivity qualified as Solo
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive))
 import Test.QuickCheck.Gen (oneof)
+import Debug.Trace as Debug
 import Prelude
 
 type FL i o =
@@ -90,6 +91,7 @@ type Layers2 =
    , FL 288 80
    , FL 80 10
    ]
+
 type Layers = '[Reshape, FL 10 2]
 type Shapes' = '[ 'D2 2 5, 'D1 10, 'D1 2]
 
@@ -151,8 +153,8 @@ instance Distance (STrainRow Solo.Disc shapes senv) where
         rowB = unSTrainRow b
         inputsAreEq = strainEq (fst rowA) (fst rowB)
         labelsAreEq = strainEq (snd rowA) (snd rowB)
-     in -- Debug.traceShow (rowA, rowB) $ if inputsAreEq && labelsAreEq then 0 else 1
-        if inputsAreEq && labelsAreEq then 0 else 1
+     in Debug.trace ("rowA: \n" <> show rowA <> "\n rowB:\n" <> show rowB) $ if inputsAreEq && labelsAreEq then 0 else 1
+        -- if inputsAreEq && labelsAreEq then 0 else 1
 
 strainEq :: S shape -> S shape -> Bool
 strainEq (S1D x) (S1D y) = unwrap x == unwrap y
@@ -207,9 +209,9 @@ clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
-      flattenedGrads = (\v -> l2clipVector (flattenGrads v) clipAmount) <$> grads
-      clippedGrad = foldr (+) (SA.konst 0) flattenedGrads
-   in SGRAD2_UNSAFE clippedGrad
+      flattenedGrads = (\v -> l2clipVector ( Debug.trace ("flatten grads" <> show (flattenGrads v)) $ flattenGrads v) clipAmount) <$> grads
+      summedGrads =  foldr (+) (SA.konst 0) flattenedGrads
+   in Debug.trace ("summedGrads:\n" <> show summedGrads) $ SGRAD2_UNSAFE summedGrads
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
@@ -250,9 +252,6 @@ instance (FlattenGrad (Gradient layer) headLen, FlattenGrad (Gradients layerTail
   flattenGrad (grad :/> gradt) = flattenGrad grad # flattenGrad gradt
   unflattenGrad = undefined
 
-instance (Distance (Gradient layer), Distance (Gradients layerTail)) => Distance (Gradients (layer : layerTail)) where
-  distance (grad1 :/> grad1t) (grad2 :/> grad2t) = undefined
-
 -- Logging this didn't seem to be the issue
 instance (KnownNat i, KnownNat o, KnownNat (o * i), KnownNat n, n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
@@ -260,9 +259,6 @@ instance (KnownNat i, KnownNat o, KnownNat (o * i), KnownNat n, n ~ o + (o * i))
 
 flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
 flattenMatrix = SA.fromList . concat . SAD.toLists . SA.unwrap
-
-instance (KnownNat i, KnownNat o) => Distance (FullyConnected' i o) where
-  distance (FullyConnected' wB wN) (FullyConnected' wB2 wN2) = undefined
 
 instance
   ( KnownNat channels
@@ -279,9 +275,6 @@ instance
   flattenGrad (Convolution' grad) = flattenMatrix grad
   unflattenGrad = undefined
 
-instance (Distance x, Distance y) => Distance (Concat m x n y) where
-  distance _ _ = undefined
-
 instance (FlattenGrad leftGrad leftLen, FlattenGrad rightGrad rightLen, KnownNat leftLen, KnownNat rightLen, len ~ (leftLen + rightLen)) => FlattenGrad (Concat m leftGrad n rightGrad) len where
   flattenGrad (Concat g1 g2) = flattenGrad g1 # flattenGrad g2
   unflattenGrad = undefined
@@ -296,24 +289,6 @@ instance FlattenGrad () 0 where
 
 type ClipAmount = Double
 
--- Clips gradients
--- https://programming-dp.com/ch12.html?highlight=clipping#gradient-clipping
-class ClipGrad grad where
-  l2clipGrad :: ClipAmount -> grad -> grad
-
-instance
-  ( KnownNat channels
-  , KnownNat filters
-  , KnownNat kernelRows
-  , KnownNat kernelColumns
-  , KnownNat strideRows
-  , KnownNat strideColumns
-  , KnownNat (kernelRows * kernelColumns * channels)
-  ) =>
-  ClipGrad (Convolution' channels filters kernelRows kernelColumns strideRows strideColumns)
-  where
-  l2clipGrad clipAmount (Convolution' grad) = Convolution' $ l2clipMatrix grad clipAmount
-
 l2clipMatrix :: (KnownNat n, KnownNat m) => SA.L n m -> ClipAmount -> SA.L n m
 l2clipMatrix m clipAmount =
   let norm = norm_2 m
@@ -323,30 +298,11 @@ l2clipMatrix m clipAmount =
 
 l2clipVector :: (KnownNat n) => SA.R n -> ClipAmount -> SA.R n
 l2clipVector v clipAmount =
-  let norm = norm_2 v
-   in if norm > clipAmount
+  -- let norm = norm_2 v
+  let norm = Distance.l2norm $ SAD.toList $ SA.unwrap v
+   in if Debug.trace ("norm: " <> show norm) $ norm > clipAmount
         then SA.dvmap (\elem -> clipAmount * (elem / norm)) v
         else v
-
-instance (ClipGrad x, ClipGrad y) => ClipGrad (Concat m x n y) where
-  l2clipGrad clipAmount (Concat c1 c2) = Concat (l2clipGrad clipAmount c1) (l2clipGrad clipAmount c2)
-
-instance ClipGrad (Gradients '[]) where
-  l2clipGrad _ GNil = GNil
-
--- This happens since there's nesting of Gradients.
--- e.g. InceptionMini
-instance (ClipGrad (Gradient layer), ClipGrad (Gradients layerTail)) => ClipGrad (Gradients (layer : layerTail)) where
-  l2clipGrad clipAmount (grad :/> gradt) = l2clipGrad clipAmount grad :/> l2clipGrad clipAmount gradt
-
-instance ClipGrad () where
-  l2clipGrad clipAmount () = ()
-
-instance (ClipGrad a, ClipGrad b) => ClipGrad (a, b) where
-  l2clipGrad clipAmount (l, r) = (l2clipGrad clipAmount l, l2clipGrad clipAmount r)
-
-instance (KnownNat i, KnownNat o) => ClipGrad (FullyConnected' i o) where
-  l2clipGrad clipAmount (FullyConnected' wB wN) = FullyConnected' (l2clipVector wB clipAmount) (l2clipMatrix wN clipAmount)
 
 -- CLI stuff
 data MnistOpts = MnistOpts FilePath FilePath Int LearningParameters
