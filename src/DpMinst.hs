@@ -92,11 +92,38 @@ type Layers2 =
    , FL 80 10
    ]
 
+type Shapes2 =
+  '[ 'D2 28 28, 'D3 28 28 1,
+      'D3 28 28 15, 'D3 14 14 15, 'D3 14 14 15, 'D3 14 14 18,
+      'D3 12 12 18, 'D3 4 4 18, 'D3 4 4 18,
+      'D1 288, 'D1 80, 'D1 10 ]
+
 type Layers = '[Reshape, FL 10 2]
 type Shapes' = '[ 'D2 2 5, 'D1 10, 'D1 2]
 
 randomMnist :: (MonadRandom m) => m MNIST
 randomMnist = randomNetwork
+
+-- zeroMnist :: MNIST
+--zeroMnist = FullyConnected' (SA.konst 0) (SA.konst 0) :~> Logit :~> NNil
+
+trainingExample :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
+trainingExample =
+  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+      label = S1D $ SA.fromList [1, 0] in
+      SList_UNSAFE $ [STRAINROW_UNSAFE (input, label)]
+
+
+trainingExample2 :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
+trainingExample2 =
+  let input = S2D $ SA.fromList [5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000]
+      label = S1D $ SA.fromList [126, 235] in
+      SList_UNSAFE $ [STRAINROW_UNSAFE (input, label)]
+
+trainingClippedGradDistance net0 =
+  let clippedGrad1 = clippedGrad trainingExample net0
+      clippedGrad2 = clippedGrad trainingExample2 net0
+   in Distance.distance clippedGrad1 clippedGrad2
 
 -- Test shape
 type TestShapes' =
@@ -104,36 +131,36 @@ type TestShapes' =
 
 type LastShape = Last Shapes'
 
-convTestDP ::
-  forall e iterations s layers shapes len.
-  (TL.KnownNat iterations, SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
-  [LabeledInput shapes] ->
-  Network layers shapes ->
-  LearningParameters ->
-  Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes)
-convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
- where
-  runIteration trainRows i net = do
-    let trained' = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
-    trained'
+-- convTestDP ::
+--   forall e iterations s layers shapes len.
+--   (TL.KnownNat iterations, SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
+--   [LabeledInput shapes] ->
+--   Network layers shapes ->
+--   LearningParameters ->
+--   Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes)
+-- convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
+--  where
+--   runIteration trainRows i net = do
+--     let trained' = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
+--     trained'
 
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
 -- Update a network with new weights after training with an instance.
-trainDP ::
-  forall e s layers shapes len.
-  (SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
-  LearningParameters ->
-  Network layers shapes ->
-  [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
-  Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network layers shapes)
-trainDP rate network trainRows = Solo.do
-  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
-      gradSum = clippedGrad @len sensitiveTrainRows network -- TODO change this to work on clippedgrad2
-  noisyGrad <- laplaceGradients @e @s gradSum
-  -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
-  Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
+-- trainDP ::
+--   forall e s layers shapes len.
+--   (SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
+--   LearningParameters ->
+--   Network layers shapes ->
+--   [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
+--   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network layers shapes)
+-- trainDP rate network trainRows = Solo.do
+--   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
+--       gradSum = clippedGrad @len sensitiveTrainRows network -- TODO change this to work on clippedgrad2
+--   noisyGrad <- laplaceGradients @e @s gradSum
+--   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
+--   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len} deriving (Show)
 
