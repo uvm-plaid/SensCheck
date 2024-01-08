@@ -16,7 +16,7 @@ z4 = $(hasSEnv 'add_matrix_solo)
 
 main :: IO ()
 main = do
-  net0 <- randomMnist
+  let net0 = staticMnist 0
   putStrLn $ "rando mnist: " <> show net0
   putStrLn $ "Result: " <> (show $ trainingClippedGradDistance net0)
 

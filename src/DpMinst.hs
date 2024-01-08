@@ -104,8 +104,8 @@ type Shapes' = '[ 'D2 2 5, 'D1 10, 'D1 2]
 randomMnist :: (MonadRandom m) => m MNIST
 randomMnist = randomNetwork
 
--- zeroMnist :: MNIST
---zeroMnist = FullyConnected' (SA.konst 0) (SA.konst 0) :~> Logit :~> NNil
+staticMnist :: Double -> MNIST
+staticMnist num = Reshape :~> (FullyConnected (FullyConnected' (SA.konst num) (SA.konst num)) (FullyConnected' (SA.konst num) (SA.konst num)) :~> Logit :~> NNil) :~> NNil
 
 trainingExample :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
 trainingExample =
@@ -116,14 +116,14 @@ trainingExample =
 
 trainingExample2 :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
 trainingExample2 =
-  let input = S2D $ SA.fromList [5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000]
-      label = S1D $ SA.fromList [126, 235] in
+  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 20000]
+      label = S1D $ SA.fromList [1, 0] in
       SList_UNSAFE $ [STRAINROW_UNSAFE (input, label)]
 
-trainingClippedGradDistance net0 =
-  let clippedGrad1 = clippedGrad trainingExample net0
-      clippedGrad2 = clippedGrad trainingExample2 net0
-   in Distance.distance clippedGrad1 clippedGrad2
+trainingclippedgraddistance net0 =
+  let clippedgrad1 = clippedgrad trainingexample net0
+      clippedgrad2 = clippedgrad trainingexample2 net0
+   in distance.distance clippedgrad1 clippedgrad2
 
 -- Test shape
 type TestShapes' =
@@ -231,7 +231,7 @@ clippedGrad ::
   (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
   Solo.SList Solo.L1 (STrainRow Solo.Disc shapes) senv ->
   Network layers shapes ->
-  SGradients Solo.L2 len senv
+  SGradients Solo.L2 len (senv)
 clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
@@ -281,7 +281,8 @@ instance (FlattenGrad (Gradient layer) headLen, FlattenGrad (Gradients layerTail
 
 -- Logging this didn't seem to be the issue
 instance (KnownNat i, KnownNat o, KnownNat (o * i), KnownNat n, n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
-  flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
+  -- flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
+  flattenGrad (FullyConnected' wB wN) = Debug.trace ("before flatten: " <> show wB <> "\n" <> show wN) $ wB # flattenMatrix wN
   unflattenGrad = undefined
 
 flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
