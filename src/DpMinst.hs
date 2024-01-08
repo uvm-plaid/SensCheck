@@ -127,11 +127,11 @@ trainDP ::
   (SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
   LearningParameters ->
   Network layers shapes ->
-  [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
+  [LabeledInput shapes] ->
   Solo.PM (Solo.TruncatePriv e Solo.Zero (s Solo.+++ s)) (Network layers shapes)
 trainDP rate network trainRows = Solo.do
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
-      gradSum = clippedGrad @len sensitiveTrainRows network -- TODO change this to work on clippedgrad2
+      gradSum = clippedGrad @len sensitiveTrainRows network
   noisyGrad <- laplaceGradients @e gradSum
   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
@@ -179,23 +179,8 @@ randomOfShapeGen = case (sing :: Sing s) of
     let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
      in S3D . SA.fromList <$> replicateM size arbitrary
 
--- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size. But zeroed out.
-zeroedOfShape :: forall s. (SingI s) => S s
-zeroedOfShape = case (sing :: Sing s) of
-  D1Sing @x ->
-    let size = fromIntegral $ TL.natVal @x Proxy
-     in S1D . SA.fromList $ replicate size 0
-  D2Sing @x @y ->
-    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
-     in S2D . SA.fromList $ replicate size 0
-  D3Sing @x @y @z ->
-    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
-     in S3D . SA.fromList $ replicate size 0
 
-
--- We are going to take a list of gradients and turn it into a single gradient
--- Takes all the training examples and computes gradients
--- Clips it
+-- Takes training examples and computes clipped gradients
 clippedGrad ::
   forall len senv layers shapes.
   (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
@@ -213,7 +198,7 @@ clippedGrad trainRows network =
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
 
--- We will use this in distance metric for the whole gradient thing
+-- Flatten gradients into a single vector
 class FlattenGrad grad len | grad -> len where
   flattenGrad :: grad -> R len
   unflattenGrad :: R len -> grad
@@ -249,9 +234,7 @@ instance (FlattenGrad (Gradient layer) headLen, FlattenGrad (Gradients layerTail
   flattenGrad (grad :/> gradt) = flattenGrad grad # flattenGrad gradt
   unflattenGrad = undefined
 
--- Logging this didn't seem to be the issue
 instance (KnownNat i, KnownNat o, KnownNat (o * i), KnownNat n, n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
-  -- flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
   flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
   unflattenGrad = undefined
 
@@ -296,8 +279,7 @@ l2clipMatrix m clipAmount =
 
 l2clipVector :: (KnownNat n) => SA.R n -> ClipAmount -> SA.R n
 l2clipVector v clipAmount =
-  -- let norm = norm_2 v
-  let norm = Distance.l2norm $ SAD.toList $ SA.unwrap v
+  let norm = norm_2 v
    in if norm > clipAmount
         then SA.dvmap (\elem -> clipAmount * (elem / norm)) v
         else v
@@ -370,7 +352,7 @@ instance (Arbitrary (t senv)) => Arbitrary (SameSizedSLists m t senv) where
     l2 <- replicateM 1 arbitrary
     pure $ SameSizedSLists (SList_UNSAFE l1) (SList_UNSAFE l2)
 
--- Some examples for testing
+-- Some unused code that was useful for testing
 
 trainingExample :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
 trainingExample =
@@ -386,3 +368,16 @@ trainingExample2 =
       SList_UNSAFE [STRAINROW_UNSAFE (input, label)]
 
 staticNetwork num = Reshape :~> (FullyConnected (FullyConnected' (SA.konst num) (SA.konst num)) (FullyConnected' (SA.konst num) (SA.konst num)) :~> Logit :~> NNil) :~> NNil
+
+-- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size. But zeroed out.
+zeroedOfShape :: forall s. (SingI s) => S s
+zeroedOfShape = case (sing :: Sing s) of
+  D1Sing @x ->
+    let size = fromIntegral $ TL.natVal @x Proxy
+     in S1D . SA.fromList $ replicate size 0
+  D2Sing @x @y ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
+     in S2D . SA.fromList $ replicate size 0
+  D3Sing @x @y @z ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
+     in S3D . SA.fromList $ replicate size 0

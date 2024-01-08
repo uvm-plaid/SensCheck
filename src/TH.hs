@@ -228,14 +228,10 @@ stripForall t = case t of
   t' -> t' -- else do nothing
 
 -- Collect Sensitive type params names
--- TODO there might be multiple
 collectSEnvTypeParams :: Type -> Set Name
 collectSEnvTypeParams type_ = case type_ of
   ForallT typeParams _ _ -> foldr (\t acc -> case t of
-      -- TODO better way for checking if name is the same?
-      -- TODO maybe do a ++
       KindedTV name _ (ConT kind) -> if isSensitive kind then acc <> Set.singleton name else acc
-      -- TODO ignore the name here? Use the one under?
       KindedTV name _ t' -> if appT t' then acc <> Set.singleton name else Set.empty
       _ -> acc
     ) Set.empty (Set.fromList typeParams)

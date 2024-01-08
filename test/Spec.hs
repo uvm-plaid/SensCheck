@@ -16,6 +16,7 @@ import Sensitivity
 import TH (genMainQuickCheck, genProp)
 import Test.QuickCheck (quickCheck, withMaxSuccess)
 import Utils
+import Data.List (singleton)
 
 f = add_dependently_typed_matrix_solo @2 @4
 
@@ -29,10 +30,7 @@ $( genMainQuickCheck
     ]
  )
 
-$( do
-    x <- genProp 'DpMinst.clippedGrad
-    pure [x]
- )
+$( singleton <$> genProp 'DpMinst.clippedGrad)
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
@@ -43,7 +41,7 @@ $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 main :: IO ()
 main = do
   putStrLn "\n\nThese tests are expected to pass:"
-  -- tests
+  tests
   sensCheckDPClippedGrad
   putStrLn "\n\n=================================="
 
