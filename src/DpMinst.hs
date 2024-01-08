@@ -1,17 +1,13 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -59,7 +55,6 @@ import Sensitivity (SDouble (D_UNSAFE), SList (SList_UNSAFE))
 import Sensitivity qualified as Solo
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive))
 import Test.QuickCheck.Gen (oneof)
-import Debug.Trace as Debug
 import Prelude
 
 type FL i o =
@@ -78,7 +73,7 @@ type MNIST =
   Network Layers Shapes'
 
 -- Layers in network
-type Layers2 =
+type Layers =
   '[ Reshape
    , Concat ('D3 28 28 1) Trivial ('D3 28 28 14) (InceptionMini 28 28 1 5 9)
    , Pooling 2 2 2 2
@@ -92,38 +87,17 @@ type Layers2 =
    , FL 80 10
    ]
 
-type Shapes2 =
+type Shapes' =
   '[ 'D2 28 28, 'D3 28 28 1,
       'D3 28 28 15, 'D3 14 14 15, 'D3 14 14 15, 'D3 14 14 18,
       'D3 12 12 18, 'D3 4 4 18, 'D3 4 4 18,
       'D1 288, 'D1 80, 'D1 10 ]
 
-type Layers = '[Reshape, FL 10 2]
-type Shapes' = '[ 'D2 2 5, 'D1 10, 'D1 2]
+type Layers2 = '[Reshape, FL 10 2]
+type Shapes2' = '[ 'D2 2 5, 'D1 10, 'D1 2]
 
 randomMnist :: (MonadRandom m) => m MNIST
 randomMnist = randomNetwork
-
-staticMnist :: Double -> MNIST
-staticMnist num = Reshape :~> (FullyConnected (FullyConnected' (SA.konst num) (SA.konst num)) (FullyConnected' (SA.konst num) (SA.konst num)) :~> Logit :~> NNil) :~> NNil
-
-trainingExample :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
-trainingExample =
-  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-      label = S1D $ SA.fromList [1, 0] in
-      SList_UNSAFE $ [STRAINROW_UNSAFE (input, label)]
-
-
-trainingExample2 :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
-trainingExample2 =
-  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 20000]
-      label = S1D $ SA.fromList [1, 0] in
-      SList_UNSAFE $ [STRAINROW_UNSAFE (input, label)]
-
-trainingclippedgraddistance net0 =
-  let clippedgrad1 = clippedgrad trainingexample net0
-      clippedgrad2 = clippedgrad trainingexample2 net0
-   in distance.distance clippedgrad1 clippedgrad2
 
 -- Test shape
 type TestShapes' =
@@ -131,43 +105,42 @@ type TestShapes' =
 
 type LastShape = Last Shapes'
 
--- convTestDP ::
---   forall e iterations s layers shapes len.
---   (TL.KnownNat iterations, SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
---   [LabeledInput shapes] ->
---   Network layers shapes ->
---   LearningParameters ->
---   Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero s) iterations) (Network layers shapes)
--- convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
---  where
---   runIteration trainRows i net = do
---     let trained' = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
---     trained'
+convTestDP ::
+  forall e iterations s layers shapes len.
+  (TL.KnownNat iterations, SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
+  [LabeledInput shapes] ->
+  Network layers shapes ->
+  LearningParameters ->
+  Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero (s Solo.+++ s)) iterations) (Network layers shapes)
+convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
+ where
+  runIteration trainRows i net = do
+    let trained' = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
+    trained'
 
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
 
 -- Update a network with new weights after training with an instance.
--- trainDP ::
---   forall e s layers shapes len.
---   (SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
---   LearningParameters ->
---   Network layers shapes ->
---   [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
---   Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Network layers shapes)
--- trainDP rate network trainRows = Solo.do
---   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
---       gradSum = clippedGrad @len sensitiveTrainRows network -- TODO change this to work on clippedgrad2
---   noisyGrad <- laplaceGradients @e @s gradSum
---   -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
---   Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
+trainDP ::
+  forall e s layers shapes len.
+  (SingI (Last shapes), KnownNat len, FlattenGrads layers len) =>
+  LearningParameters ->
+  Network layers shapes ->
+  [LabeledInput shapes] -> -- Should we be taking in the training data as sensitive list here? or expect the caller to provide it?
+  Solo.PM (Solo.TruncatePriv e Solo.Zero (s Solo.+++ s)) (Network layers shapes)
+trainDP rate network trainRows = Solo.do
+  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
+      gradSum = clippedGrad @len sensitiveTrainRows network -- TODO change this to work on clippedgrad2
+  noisyGrad <- laplaceGradients @e gradSum
+  -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
+  Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
 
 newtype SGradients (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len} deriving (Show)
 
 instance (KnownNat h) => Distance (SGradients Solo.L2 h senv) where
   distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l)) (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l2))
 
--- SHould return a non-sensitive Gradient
 laplaceGradients :: forall e s len layers. SGradients Solo.L2 len s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients layers)
 laplaceGradients gradient = undefined
 
@@ -180,8 +153,7 @@ instance Distance (STrainRow Solo.Disc shapes senv) where
         rowB = unSTrainRow b
         inputsAreEq = strainEq (fst rowA) (fst rowB)
         labelsAreEq = strainEq (snd rowA) (snd rowB)
-     in Debug.trace ("rowA: \n" <> show rowA <> "\n rowB:\n" <> show rowB) $ if inputsAreEq && labelsAreEq then 0 else 1
-        -- if inputsAreEq && labelsAreEq then 0 else 1
+     in if inputsAreEq && labelsAreEq then 0 else 1
 
 strainEq :: S shape -> S shape -> Bool
 strainEq (S1D x) (S1D y) = unwrap x == unwrap y
@@ -196,31 +168,29 @@ instance (SingI (Head shapes), SingI (Last shapes)) => Arbitrary (STrainRow m sh
 
 -- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size.
 randomOfShapeGen :: forall s. (SingI s) => Gen (S s)
-randomOfShapeGen = do
-  case (sing :: Sing s) of
-    D1Sing @x ->
-      let size = fromIntegral $ TL.natVal @x Proxy
-       in S1D . SA.fromList <$> replicateM size arbitrary
-    D2Sing @x @y ->
-      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
-       in S2D . SA.fromList <$> replicateM size arbitrary
-    D3Sing @x @y @z ->
-      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
-       in S3D . SA.fromList <$> replicateM size arbitrary
+randomOfShapeGen = case (sing :: Sing s) of
+  D1Sing @x ->
+    let size = fromIntegral $ TL.natVal @x Proxy
+     in S1D . SA.fromList <$> replicateM size arbitrary
+  D2Sing @x @y ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
+     in S2D . SA.fromList <$> replicateM size arbitrary
+  D3Sing @x @y @z ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
+     in S3D . SA.fromList <$> replicateM size arbitrary
 
 -- Takes a Shape. Get's the Matrix dimension. Then generates a List of the specified size. But zeroed out.
 zeroedOfShape :: forall s. (SingI s) => S s
-zeroedOfShape = do
-  case (sing :: Sing s) of
-    D1Sing @x ->
-      let size = fromIntegral $ TL.natVal @x Proxy
-       in S1D . SA.fromList $ replicate size 0
-    D2Sing @x @y ->
-      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
-       in S2D . SA.fromList $ replicate size 0
-    D3Sing @x @y @z ->
-      let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
-       in S3D . SA.fromList $ replicate size 0
+zeroedOfShape = case (sing :: Sing s) of
+  D1Sing @x ->
+    let size = fromIntegral $ TL.natVal @x Proxy
+     in S1D . SA.fromList $ replicate size 0
+  D2Sing @x @y ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy
+     in S2D . SA.fromList $ replicate size 0
+  D3Sing @x @y @z ->
+    let size = fromIntegral $ TL.natVal @x Proxy * TL.natVal @y Proxy * TL.natVal @z Proxy
+     in S3D . SA.fromList $ replicate size 0
 
 
 -- We are going to take a list of gradients and turn it into a single gradient
@@ -231,14 +201,14 @@ clippedGrad ::
   (KnownNat len, SingI (Last shapes), FlattenGrads layers len) =>
   Solo.SList Solo.L1 (STrainRow Solo.Disc shapes) senv ->
   Network layers shapes ->
-  SGradients Solo.L2 len (senv)
+  SGradients Solo.L2 len (senv Solo.+++ senv)
 clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
   let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
       clipAmount = 1.0
-      flattenedGrads = (\v -> l2clipVector ( Debug.trace ("flatten grads" <> show (flattenGrads v)) $ flattenGrads v) clipAmount) <$> grads
+      flattenedGrads = (\v -> l2clipVector (flattenGrads v) clipAmount) <$> grads
       summedGrads =  foldr (+) (SA.konst 0) flattenedGrads
-   in Debug.trace ("summedGrads:\n" <> show summedGrads) $ SGRAD2_UNSAFE summedGrads
+   in SGRAD2_UNSAFE summedGrads
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
@@ -282,7 +252,7 @@ instance (FlattenGrad (Gradient layer) headLen, FlattenGrad (Gradients layerTail
 -- Logging this didn't seem to be the issue
 instance (KnownNat i, KnownNat o, KnownNat (o * i), KnownNat n, n ~ o + (o * i)) => FlattenGrad (FullyConnected' i o) n where
   -- flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
-  flattenGrad (FullyConnected' wB wN) = Debug.trace ("before flatten: " <> show wB <> "\n" <> show wN) $ wB # flattenMatrix wN
+  flattenGrad (FullyConnected' wB wN) = wB # flattenMatrix wN
   unflattenGrad = undefined
 
 flattenMatrix :: (KnownNat i, KnownNat o, KnownNat (i * o)) => SA.L i o -> R (i * o)
@@ -328,7 +298,7 @@ l2clipVector :: (KnownNat n) => SA.R n -> ClipAmount -> SA.R n
 l2clipVector v clipAmount =
   -- let norm = norm_2 v
   let norm = Distance.l2norm $ SAD.toList $ SA.unwrap v
-   in if Debug.trace ("norm: " <> show norm) $ norm > clipAmount
+   in if norm > clipAmount
         then SA.dvmap (\elem -> clipAmount * (elem / norm)) v
         else v
 
@@ -379,7 +349,7 @@ parseMNIST = do
 --  where
 --   -- TODO train calls applyUpdate and backPropagate
 --   -- Goal: Override those functions
---   trainEach rate' !network (i, o) = train rate' network i o
+--   trainEach rate' network (i, o) = train rate' network i o
 
 --   runIteration trainRows validateRows net i = do
 --     let trained' = foldl' (trainEach (rate{learningRate = learningRate rate * 0.9 ^ i})) net trainRows
@@ -399,3 +369,20 @@ instance (Arbitrary (t senv)) => Arbitrary (SameSizedSLists m t senv) where
     l1 <- replicateM 1 arbitrary
     l2 <- replicateM 1 arbitrary
     pure $ SameSizedSLists (SList_UNSAFE l1) (SList_UNSAFE l2)
+
+-- Some examples for testing
+
+trainingExample :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
+trainingExample =
+  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+      label = S1D $ SA.fromList [1, 0] in
+      SList_UNSAFE [STRAINROW_UNSAFE (input, label)]
+
+
+trainingExample2 :: Solo.SList Solo.L1 (STrainRow Solo.Disc Shapes') senv
+trainingExample2 =
+  let input = S2D $ SA.fromList [1, 1, 1, 1, 1, 1, 1, 1, 1, 20000]
+      label = S1D $ SA.fromList [1, 0] in
+      SList_UNSAFE [STRAINROW_UNSAFE (input, label)]
+
+staticNetwork num = Reshape :~> (FullyConnected (FullyConnected' (SA.konst num) (SA.konst num)) (FullyConnected' (SA.konst num) (SA.konst num)) :~> Logit :~> NNil) :~> NNil

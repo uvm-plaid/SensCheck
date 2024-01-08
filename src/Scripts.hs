@@ -14,6 +14,8 @@ import qualified DpMinst
 import Language.Haskell.TH.Datatype (resolveTypeSynonyms)
 import Debug.Trace
 
+-- A playground for a few scripts
+
 -- Split when encountering ->
 splitArgs :: Type -> [Type]
 splitArgs typ = case typ of
@@ -44,11 +46,3 @@ hasSEnv name = do
         (AppT t1 t2) -> appT t2 || appT t1
         _ -> False -- Maybe search through other cases?
  
--- hasSEnv2 = do
---     t <- reifyType 'solo_plus-- Maybe resolve type snonymns
---     stringE $ case t of
---       -- TODO looks like it also shows up in the 3rd argument after ContT kind
---       ForallT [KindedTV name _ (ConT kind), _] _ t' -> show $ show kind == "Sensitivity.SEnv"
---       l -> "nope"
-      
-    -- stringE $ pprint $ head $ splitArgs t

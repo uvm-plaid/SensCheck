@@ -208,10 +208,10 @@ parseInnerSensitiveAST typeParams typ = case typ of
 parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
 parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
-  sensitiveTypeParams = Debug.traceShow (collectSEnvTypeParams typ) (collectSEnvTypeParams typ)
+  sensitiveTypeParams = collectSEnvTypeParams typ
   splitTypes = splitArgs (stripForall typ)
   (unparsedTypes, sensAsts) =
-    Debug.trace ("After collecting sensitive type params: " <> show sensitiveTypeParams) $ foldl
+    foldl
       ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST sensitiveTypeParams x of
           Nothing -> (x : typeAcc, sensAstAcc)
           Just sensAst -> (typeAcc, sensAst : sensAstAcc)
@@ -295,7 +295,7 @@ genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: SensitiveAST -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|Debug.trace ("dout: " <> show dout <> "<= " <> show $(computeRhs ast senvToDistance)) $ dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
+genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
  where
   computeRhs :: SensitiveAST -> SEnvToDistance -> Q Exp
   computeRhs sexp senvToDistance = case sexp of

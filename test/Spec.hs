@@ -35,11 +35,8 @@ $( do
  )
 
 sensCheckDPClippedGrad = do
-  -- net0 <- evalRandIO randomMnist
-  let net0 = DpMinst.staticMnist 0
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> Debug.trace (show trainingRows1 <> "\n" <> show trainingRows2) $ clippedGrad_prop trainingRows1 trainingRows2 $! net0)
-
--- putStrLn $ show $ flattenGrads $ testZeros net0
+  net0 <- evalRandIO randomMnist
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 $! net0)
 
 $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
