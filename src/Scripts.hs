@@ -33,10 +33,8 @@ stripForall t = case t of
 hasSEnv name = do
     t <- reifyType name >>= resolveTypeSynonyms -- Maybe resolve type snonymns
     stringE $ case t of
-      -- TODO looks like it also shows up in the 3rd argument after ContT kind
       ForallT (_ : KindedTV name _ appT': _) _ t' -> traceShow t $ show $ appT appT'
       l -> "nope " <> show t
-    -- stringE $ pprint $ head $ splitArgs t
   where
     -- Search through AppT
     appT t =
@@ -44,5 +42,5 @@ hasSEnv name = do
         (AppT t1 (ConT kind)) -> traceShow t1 $ show kind == "Sensitivity.SEnv" || show kind == "Sensitivity.Sensitivity" || appT t1
         -- More likely to be in t2. I'm not sure if it will ever appear in t1.
         (AppT t1 t2) -> appT t2 || appT t1
-        _ -> False -- Maybe search through other cases?
+        _ -> False
  
