@@ -266,7 +266,6 @@ nameToBinaryOp name
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
 newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, Ord)
 
--- TODO to debug I could print input1 and input2 and if the distance is 0 between inputs they should be the same
 -- Generates distance statement
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
 genDistanceStatement :: SensitiveAST -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
