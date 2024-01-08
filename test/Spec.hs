@@ -48,4 +48,4 @@ main = do
   putStrLn "\n\n=================================="
 
   putStrLn "These tests are expected to fail:\n\n"
-  -- failing_tests
+  failing_tests
