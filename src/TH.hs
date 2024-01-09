@@ -225,7 +225,7 @@ parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
 stripForall :: Type -> Type
 stripForall t = case t of
   ForallT _ _ t' -> t'
-  t' -> t' -- else do nothing
+  t' -> t'
 
 -- Collect Sensitive type params names
 collectSEnvTypeParams :: Type -> Set Name
@@ -238,12 +238,10 @@ collectSEnvTypeParams type_ = case type_ of
   t' -> Set.empty
   where
     -- Search through AppT
-    -- TODO make this return a Set
-    -- TODO actually generalize this to above
     appT t =
       case t of
         (AppT t1 (ConT kind)) -> isSensitive kind || appT t1
-        -- More likely to be in t2. I'm not sure if it will ever appear in t1.
+        -- More likely to be in t2
         (AppT t1 t2) -> appT t2 || appT t1
         _ -> False
     isSensitive :: Name -> Bool

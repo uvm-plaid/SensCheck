@@ -30,11 +30,12 @@ $( genMainQuickCheck
     ]
  )
 
+-- Need to initialize a random network in IO so manually writing the test however the property is still generated
 $( singleton <$> genProp 'DpMinst.clippedGrad)
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 $! net0)
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 net0)
 
 $(genMainQuickCheck "failing_tests" ['add_matrix_solo, 'solo_plus_incorrect])
 
