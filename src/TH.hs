@@ -41,6 +41,10 @@ import Sensitivity qualified
 verbose :: Bool
 verbose = True
 
+-- Padding due to floating point imprecision
+-- This demonstrates a mismatch between implementation
+padding = 0.00000001
+
 data SensitiveAST
   = SEnv_ Name -- Terminal Sensitivity Environment
   | TyLit_ TyLit -- Terminal Type Literal (e.g. dependently typed 1)
@@ -288,7 +292,7 @@ genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
 -- for example if the output is: s1 +++ s2 then we assert d1 + d2
 -- Note we need to add some small padding cause floating point artimatic
 genPropertyStatement :: SensitiveAST -> SEnvToDistance -> Q Exp
-genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDistance) + 0.00000001|]
+genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDistance) + padding|]
  where
   computeRhs :: SensitiveAST -> SEnvToDistance -> Q Exp
   computeRhs sexp senvToDistance = case sexp of
