@@ -20,9 +20,9 @@
 module Privacy where
 
 import Data.Proxy
-import qualified GHC.TypeLits as TL
+import GHC.TypeLits qualified as TL
 import Prelude hiding (return, sum, (>>=))
-import qualified Prelude as P
+import Prelude qualified as P
 
 import Rats
 import Reals

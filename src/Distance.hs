@@ -1,11 +1,26 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Distance where
 
 import Data.Matrix qualified as Matrix
-import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
+import Data.Singletons (SingI (..))
+import Grenade
+import Grenade.Core.Shape
+import Numeric.LinearAlgebra qualified as LA
+import Numeric.LinearAlgebra.Data qualified as LAD
+import Numeric.LinearAlgebra.Static (Sized (unwrap))
+import Numeric.LinearAlgebra.Static qualified as LAS
+import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble (D_UNSAFE), SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
+import SensStaticHMatrix (SensStaticHMatrix (SensStaticHMatrixUNSAFE))
+import qualified Numeric.LinearAlgebra.HMatrix as HMatrix
+import qualified Numeric.LinearAlgebra.Static as Static
+import GHC.TypeLits (KnownNat)
 
 class Distance a where
   distance :: a -> a -> Double
@@ -22,6 +37,9 @@ instance Distance (SDouble Disc senv) where
 instance Distance (stype senv) => Distance (SList L2 stype senv) where
   distance (SList_UNSAFE a) (SList_UNSAFE b) = l2dist a b
 
+instance Distance (stype senv) => Distance (SList L1 stype senv) where
+  distance (SList_UNSAFE a) (SList_UNSAFE b) = l1dist a b
+
 -- For 2 tuples with elements: (a_1, b_1) and (a_2, b_2)
 -- We need to take the following distances
 -- d(d(a_1, a_2), d(b_1, b_2))
@@ -35,7 +53,22 @@ instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
--- TODO more instances.
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L2 (SDouble nmetric) senv) where
+  distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l2norm (
+    uncurry distance <$>
+      zip
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap a))
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap b))
+      )
+
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L1 (SDouble nmetric) senv) where
+  distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l1norm (
+    uncurry distance <$>
+      zip
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap a))
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap b))
+      )
+
 
 -- Distance Functions
 

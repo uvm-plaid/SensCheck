@@ -1,9 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import Language.Haskell.TH
-import TH
+import Scripts
+import AnnotatedExternalLibrary
+import DpMinst
 
 
-main :: IO ()
-main = do
-  print "I don't do anything :). Run stack test instead."
+main = putStrLn "Run stack test"

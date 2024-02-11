@@ -27,7 +27,17 @@ dependencies:
 - template-haskell
 - th-abstraction
 - safe
+- grenade
 - hmatrix
+- vector
+- text
+- transformers
+- attoparsec
+- optparse-applicative
+- MonadRandom
+- singletons
+- singletons-base
+
 
 default-extensions:
 - ImportQualifiedPost

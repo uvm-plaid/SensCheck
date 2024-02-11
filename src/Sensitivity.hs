@@ -48,7 +48,7 @@ type L1Pair = SPair L1 -- \$⊗$-pairs in Fuzz
 type L2Pair = SPair L2 -- Not in Fuzz
 type LInfPair = SPair LInf -- \$\&$-pairs in Fuzz
 
-newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]}
+newtype SList (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SList_UNSAFE {unSList :: [f s]} deriving (Show)
 type L1List = SList L1 -- \$τ␣‹list›$ in Fuzz
 type L2List = SList L2 -- Not in Fuzz
 type LInfList = SList LInf -- \$τ␣‹alist›$ in Fuzz
@@ -132,6 +132,13 @@ instance (Arbitrary (stype1 senv), Arbitrary (stype2 senv)) => Arbitrary (SPair 
     s2 <- arbitrary @(stype2 senv)
     pure $ P_UNSAFE (s1, s2)
 
+instance (forall senv. Arbitrary (innerType senv)) => Arbitrary (SList cmetric innerType s1) where
+  arbitrary = do
+    (Positive size) <- arbitrary @(Positive Int)
+    -- Generate a list of arbitrary elements of size row * col
+    elems <- replicateM size arbitrary
+    pure $ SList_UNSAFE elems
+
 -- Similar to SList we need a custom data type
 newtype SMatrix (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = SMatrix_UNSAFE {unSMatrix :: Matrix.Matrix (f s)}
 
@@ -153,6 +160,7 @@ instance (forall senv. Arbitrary (innerType senv)) => Arbitrary (SMatrix cmetric
 
 -- Dependently typed Matrix that is better for automatically generating props
 -- Credit to https://hackage.haskell.org/package/matrix-static-0.3/docs/src/Data.Matrix.Static.html#Matrix
+-- TODO maybe we could get rid of this in favor of the other one?
 newtype DPSMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = DPSMatrix_UNSAFE {unDPSMatrix :: Matrix.Matrix (f s)}
 
 -- A Matrix of DPSDoubles with L2 Metrix
