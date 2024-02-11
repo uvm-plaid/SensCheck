@@ -21,10 +21,15 @@ import System.Environment (getArgs)
 
 import qualified AnnotatedExternalLibrary as Correct
 import qualified IncorrectAnnotations as Incorrect
+import qualified SensStaticHMatrix as SensStaticHMatrix
 
+-- TODO I should stop using camel case
 add_dependently_typed_matrix_fixed = Correct.add_dependently_typed_matrix_solo @3 @4
 
 add_dependently_typed_matrix_incorrect = Incorrect.add_dependently_typed_matrix_solo1 @3 @4
+
+sensStaticHMatrixPlus = SensStaticHMatrix.plus @3 @4 @L1 @Diff
+sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
 
 
 $( genMainQuickCheck
@@ -36,6 +41,8 @@ $( genMainQuickCheck
     , 'add_dependently_typed_matrix_fixed
     , 'Correct.solo_mixed_types
     , 'Correct.solo_mixed_types_mult
+    , 'sensStaticHMatrixPlus
+    , 'sensStaticHMatrixMult
     ]
  )
 

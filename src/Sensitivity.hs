@@ -160,6 +160,7 @@ instance (forall senv. Arbitrary (innerType senv)) => Arbitrary (SMatrix cmetric
 
 -- Dependently typed Matrix that is better for automatically generating props
 -- Credit to https://hackage.haskell.org/package/matrix-static-0.3/docs/src/Data.Matrix.Static.html#Matrix
+-- TODO maybe we could get rid of this in favor of the other one?
 newtype DPSMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (f :: SEnv -> *) (s :: SEnv) = DPSMatrix_UNSAFE {unDPSMatrix :: Matrix.Matrix (f s)}
 
 -- A Matrix of DPSDoubles with L2 Metrix

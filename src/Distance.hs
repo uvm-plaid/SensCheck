@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Distance where
 
@@ -14,8 +15,12 @@ import Numeric.LinearAlgebra qualified as LA
 import Numeric.LinearAlgebra.Data qualified as LAD
 import Numeric.LinearAlgebra.Static (Sized (unwrap))
 import Numeric.LinearAlgebra.Static qualified as LAS
-import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble, SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
+import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble (D_UNSAFE), SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
 import Utils (toDoubleMatrix, toDoubleMatrix')
+import SensStaticHMatrix (SensStaticHMatrix (SensStaticHMatrixUNSAFE))
+import qualified Numeric.LinearAlgebra.HMatrix as HMatrix
+import qualified Numeric.LinearAlgebra.Static as Static
+import GHC.TypeLits (KnownNat)
 
 class Distance a where
   distance :: a -> a -> Double
@@ -47,6 +52,23 @@ instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
 
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
+
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L2 (SDouble nmetric) senv) where
+  distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l2norm (
+    uncurry distance <$>
+      zip
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap a))
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap b))
+      )
+
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L1 (SDouble nmetric) senv) where
+  distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l1norm (
+    uncurry distance <$>
+      zip
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap a))
+        (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap b))
+      )
+
 
 -- Distance Functions
 
