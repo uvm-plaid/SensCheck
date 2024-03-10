@@ -5,20 +5,20 @@
 
 packages:
 - completed:
-    commit: 4bd210a77e49d38355334db2804769c38a9a8614
-    git: git@github.com:psilospore/grenade.git
+    commit: 83cb4e4ec27ece8e7a7540d096bcf6c5ef3e8e7d
+    git: git@github.com:HuwCampbell/grenade.git
     name: grenade
     pantry-tree:
-      sha256: 575ffaa369ff6f41243a29c9980a620ec0849ec4baee6204a6aa037df7b6433b
+      sha256: 86295ed884523ba47e80cdb0865e58a23a375c833fd8b56b633e7ef09765a006
       size: 5500
     version: 0.1.0
   original:
-    commit: 4bd210a77e49d38355334db2804769c38a9a8614
-    git: git@github.com:psilospore/grenade.git
+    commit: 83cb4e4ec27ece8e7a7540d096bcf6c5ef3e8e7d
+    git: git@github.com:HuwCampbell/grenade.git
 snapshots:
 - completed:
-    sha256: 5a59b2a405b3aba3c00188453be172b85893cab8ebc352b1ef58b0eae5d248a2
-    size: 650475
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/26.yaml
+    sha256: 1ecd36c6af82cd6940fd16e4ecf40ac6e3844ba8f49873e34f1cf12bd1f9dfb1
+    size: 712886
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/10.yaml
   original:
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/26.yaml
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/10.yaml

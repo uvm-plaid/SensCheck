@@ -54,7 +54,7 @@ library
       MonadRandom
     , QuickCheck
     , attoparsec
-    , base >=4.7 && <5
+    , base >=4.18 && <5
     , containers
     , grenade
     , hmatrix
@@ -85,7 +85,7 @@ executable pbt-sensitivity-exe
       MonadRandom
     , QuickCheck
     , attoparsec
-    , base >=4.7 && <5
+    , base >=4.18 && <5
     , containers
     , grenade
     , hmatrix
@@ -119,7 +119,7 @@ test-suite pbt-sensitivity-test
       MonadRandom
     , QuickCheck
     , attoparsec
-    , base >=4.7 && <5
+    , base >=4.18 && <5
     , containers
     , grenade
     , hmatrix

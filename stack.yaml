@@ -18,7 +18,7 @@
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
 resolver:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/26.yaml
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/10.yaml
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -36,8 +36,14 @@ packages:
 # forks / in-progress versions pinned to a git hash. For example:
 #
 extra-deps:
- - git: git@github.com:psilospore/grenade.git
-   commit: 4bd210a77e49d38355334db2804769c38a9a8614
+ - git: git@github.com:HuwCampbell/grenade.git 
+   commit: 83cb4e4ec27ece8e7a7540d096bcf6c5ef3e8e7d
+#  - MonadRandom-0.5.3@sha256:bb553af2bac914362a54983e4ed2e0b6352c09b73a1e1e280ec4befe14c4270c,1456
+#  - primitive-0.7.4.0@sha256:c2f0ed97b3dce97f2f43b239c3be8b136e4368f1eb7b61322ee9ac98f604622b,2982
+#  - vector-0.12.3.1@sha256:39141f312871b7c793a63be76635999e84d442aa3290aec59f30638ec0bf23a7,8218
+#  - mtl-2.2.2@sha256:1050fb71acd9f5d67da7d992583f5bd0eb14407b9dc7acc122af1b738b706ca3,2261
+#  - transformers-0.5.6.2@sha256:6c959d14430f4deffb99579ba019de07c3d852a2122b6f449344386c7d75ff1d,3172
+
 # - git: https://github.com/commercialhaskell/stack.git
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
@@ -66,3 +72,4 @@ extra-deps:
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
+
