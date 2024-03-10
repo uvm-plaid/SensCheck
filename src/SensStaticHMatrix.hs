@@ -40,6 +40,7 @@ import Data.Sequence (chunksOf)
 newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (type' :: SEnv -> *) (s :: SEnv) = 
   SensStaticHMatrixUNSAFE {unSensStaticHMatrix :: L x y}
 
+
 instance (forall senv. Arbitrary (type' senv), KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x y cmetric type' s1) where
    arbitrary = do
     -- Note that I'm not generating matrices of aribitary row and column size unlike SMatrix. This becomes useful in generating matrices that require rows and cols to match.
