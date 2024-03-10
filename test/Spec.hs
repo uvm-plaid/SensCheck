@@ -23,10 +23,6 @@ import System.Environment (getArgs)
 import qualified AnnotatedExternalLibrary as Correct
 import qualified IncorrectAnnotations as Incorrect
 import qualified SensStaticHMatrix as SensStaticHMatrix
-import GHC.TypeLits.Singletons (SNat (SNat))
-
--- TODO I should stop using camel case
-add_dependently_typed_matrix_fixed = withSomeSNat n $ \(SNat :: SNat n) -> Correct.add_dependently_typed_matrix_solo @n @n
 
 add_dependently_typed_matrix_incorrect = Incorrect.add_dependently_typed_matrix_solo1 @3 @4
 
@@ -40,12 +36,10 @@ $( genMainQuickCheck
     [ 'Correct.solo_double
     , 'Correct.solo_plus
     , 'Correct.add_pair_solo
-    , 'add_dependently_typed_matrix_fixed
     , 'Correct.solo_mixed_types
     , 'Correct.solo_mixed_types_mult
     , 'sensStaticHMatrixPlus
     , 'sensStaticHMatrixMult
-    , add_dependently_typed_matrix_fixed
     ]
  )
 
@@ -55,8 +49,6 @@ $( singleton <$> genProp 'DpMinst.clippedGrad)
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
   quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 net0)
-
-$( singleton <$> genProp 'DpMinst.clippedGrad)
 
 $( genMainQuickCheck
     "failing_tests"
