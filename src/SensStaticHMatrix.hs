@@ -89,9 +89,13 @@ transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 -- plusWithSomeNat = (withKnownNat2 plus) 5 8
 
 -- https://stackoverflow.com/questions/39755675/quickchecking-a-property-about-length-indexed-lists
-data BoxSHMatrix cmetric nmetric s where
+data BoxSHMatrix (cmetric :: CMetric) (nmetric :: NMetric) s where
   Box :: SensStaticHMatrix x y cmetric nmetric s -> BoxSHMatrix cmetric nmeric s
 
+instance Show (BoxSHMatrix cmetric nmetric s) where
+  -- Kind of hard to make this work since I need to know the size of the matrix
+  --show (Box m) = show $ unSensStaticHMatrix @1 @1 @cmetric @nmetric m
+  show (Box m) = "BoxSHMatrix"
 
 -- Generate a matrix given a row and column size
 genMatrix :: forall cmetric nmetric s. (Arbitrary (SDouble nmetric s)) => Int -> Int -> Gen (BoxSHMatrix cmetric nmetric s)
@@ -103,3 +107,11 @@ genMatrix row col = do
   -- This does not work for example
   -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
   pure $ Box $ SensStaticHMatrixUNSAFE undefined --_ $ chunksOf col elems
+
+
+
+prop_plus :: Property
+prop_plus = forAll (genMatrix @L2 @Diff 3 3) $ \(Box m1) ->
+            forAll (genMatrix @L2 @Diff 3 3) $ \(Box m2) ->
+              -- TODO
+            True
