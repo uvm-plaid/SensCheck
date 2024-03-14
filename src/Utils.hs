@@ -5,7 +5,7 @@ module Utils where
 import Data.Matrix qualified as Matrix
 import Sensitivity (DPSMatrix (unDPSMatrix), SDouble (unSDouble), SMatrix (unSMatrix))
 import GHC.TypeLits.Singletons
-import GHC.TypeNats
+import GHC.TypeNats ( withSomeSNat )
 
 -- General utilty functions that might be used by generated code
 
@@ -24,3 +24,4 @@ withKnownNat2 :: (forall n1 n2 . (KnownNat n1, KnownNat n2) => r) -> Natural -> 
 withKnownNat2 f n1 n2 = withSomeSNat n1 $ \(SNat :: SNat n1) -> 
     withSomeSNat n2 $ \(SNat :: SNat n2) ->
       f @n1 @n2
+

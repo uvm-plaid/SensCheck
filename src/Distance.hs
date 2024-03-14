@@ -53,7 +53,7 @@ instance Distance (stype senv) => Distance (SMatrix L2 stype senv) where
 instance Distance (stype senv) => Distance (DPSMatrix x y L2 stype senv) where
   distance (DPSMatrix_UNSAFE a) (DPSMatrix_UNSAFE b) = l2norm (uncurry distance <$> zip (Matrix.toList a) (Matrix.toList b))
 
-instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L2 (SDouble nmetric) senv) where
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L2 nmetric senv) where
   distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l2norm (
     uncurry distance <$>
       zip
@@ -61,7 +61,7 @@ instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nme
         (D_UNSAFE @nmetric @senv <$> concat (HMatrix.toLists $ Static.unwrap b))
       )
 
-instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L1 (SDouble nmetric) senv) where
+instance forall x y nmetric senv. (KnownNat x, KnownNat y, Distance (SDouble nmetric senv)) => Distance (SensStaticHMatrix x y L1 nmetric senv) where
   distance (SensStaticHMatrixUNSAFE a) (SensStaticHMatrixUNSAFE b) = l1norm (
     uncurry distance <$>
       zip

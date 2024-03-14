@@ -4,6 +4,8 @@
 
 {- | Contains quickcheck tests for Verifier
  TODO this should be in the test/ directory but currently having issues with HLS
+ TODO I think it turns out we can't get around this with dependent types. It's still useful to demonstrate
+ that dependent typed libraries can be wrapped but the experience doesn't improve.
 -}
 module MatrixCorrectedSpec where
 

@@ -29,6 +29,7 @@ add_dependently_typed_matrix_incorrect = Incorrect.add_dependently_typed_matrix_
 sensStaticHMatrixPlus = SensStaticHMatrix.plus @3 @4 @L1 @Diff
 sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
 
+-- sensStaticHMatrixPlus2 = (withKnownNat2 SensStaticHMatrix.plus 2 5)
 
 $( genMainQuickCheck
     "passing_tests"
@@ -62,9 +63,19 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    ["pass"] -> do
+    ["pass"] -> pass
+    ["fail"] -> fail
+    otherwise -> do
+      putStrLn "Defaulting to running all tests."
+      putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
+      pass
+      fail
+  where
+    pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       passing_tests
       sensCheckDPClippedGrad
-    ["fail"] -> putStrLn "These tests are expected to fail:\n\n" *> failing_tests
-    otherwise -> putStrLn "Run as stack test --test-arguments=\"pass|fail\""
+    fail = do
+      putStrLn "These tests are expected to fail:\n\n"
+      failing_tests
+

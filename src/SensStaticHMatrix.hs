@@ -27,21 +27,24 @@ import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE
 import Utils
 import Test.QuickCheck
 import Data.Proxy
-import Prelude hiding ((<>)) 
+import Prelude hiding ((<>))
 import Control.Monad (replicateM)
 import Data.Sequence (chunksOf)
+import GHC.TypeNats ( withSomeSNat )
+import GHC.Num.Natural (Natural)
+import Primitives (plus_cong)
 
 -- | SensStaticHMatrix is a wrapper around Numeric.LinearAlgebra.Matrix.Static
 -- A sensitive wrapper of HMatrix's depedendently typed Matrix
 -- For the non dependently typed Matrix see SensHMatrix
 -- HMatrix doesn't have a functor instance so we need to instead reference the inner type directly
 -- e.g. instead of using Matrix SDouble Diff senv we create a newtype wrapper around Matrix Double
--- TODO make this less or more polymorphic. Static matrix only works on Naturals anyway.
-newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (type' :: SEnv -> *) (s :: SEnv) = 
+-- TODO make this less or more polymorphic
+newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (n :: NMetric) (s :: SEnv) =
   SensStaticHMatrixUNSAFE {unSensStaticHMatrix :: L x y}
 
 
-instance (forall senv. Arbitrary (type' senv), KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x y cmetric type' s1) where
+instance (forall senv. KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x y cmetric nmetric s1) where
    arbitrary = do
     -- Note that I'm not generating matrices of aribitary row and column size unlike SMatrix. This becomes useful in generating matrices that require rows and cols to match.
     let row = TL.natVal @x Proxy
@@ -50,14 +53,22 @@ instance (forall senv. Arbitrary (type' senv), KnownNat x, KnownNat y) => Arbitr
     elems <- replicateM (fromInteger (row * col)) arbitrary
     pure $ SensStaticHMatrixUNSAFE $ matrix elems
 
-instance (Show (type' s), KnownNat x, KnownNat y) => Show (SensStaticHMatrix x y m type' s) where
+instance (KnownNat x, KnownNat y) => Show (SensStaticHMatrix x y m n s) where
   show smatrix = show $ unSensStaticHMatrix smatrix
 
-plus :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric (SDouble metric) s1 -> SensStaticHMatrix x y cmetric (SDouble metric) s2 -> SensStaticHMatrix x y cmetric (SDouble metric) (s1 +++ s2)
+-- Generate a matrix given a row and column size
+-- genMatrix :: Arbitrary a => Int -> Int -> Gen (Matrix.Matrix a)
+-- genMatrix row col = do
+--   -- Generate a list of arbitrary elements of size row * col
+--   elems <- replicateM (row * col) arbitrary
+--   -- Convert to Matrix
+--   pure $ Matrix.fromList row col elems
+
+plus :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 plus m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 + unSensStaticHMatrix m2
 
-subtract :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric (SDouble metric) s1 -> SensStaticHMatrix x y cmetric (SDouble metric) s2 -> SensStaticHMatrix x y cmetric (SDouble metric) (s1 +++ s2)
+subtract :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 subtract m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 - unSensStaticHMatrix m2
 
@@ -65,9 +76,30 @@ subtract m1 m2 =
 -- ScaleSens  senv
 
 -- Hmm is mult +++?
-mult :: (KnownNat x, KnownNat k, KnownNat y) => SensStaticHMatrix x k cmetric (SDouble metric) s1 -> SensStaticHMatrix k y cmetric (SDouble metric) s2 -> SensStaticHMatrix x y cmetric (SDouble metric) (s1 +++ s2)
+mult :: (KnownNat x, KnownNat k, KnownNat y) => SensStaticHMatrix x k cmetric nmetric s1 -> SensStaticHMatrix k y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
 -- Not sure what this is
-transpose :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric (SDouble metric) s1 -> SensStaticHMatrix y x cmetric (SDouble metric) s1
+transpose :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix y x cmetric nmetric s1
 transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
+
+
+-- plusWithSomeNat :: SensStaticHMatrix x y cmetric (SDouble metric) s1 -> SensStaticHMatrix   cmetric      (SDouble metric)      s2 -> SensStaticHMatrix      ghc-prim-0.10.0:GHC.Types.Any      ghc-prim-0.10.0:GHC.Types.Any      cmetric      (SDouble metric)      (s1 +++ s2)
+-- hmm this doesn't wokr but also the type signature doesn't make sense
+-- plusWithSomeNat = (withKnownNat2 plus) 5 8
+
+-- https://stackoverflow.com/questions/39755675/quickchecking-a-property-about-length-indexed-lists
+data BoxSHMatrix cmetric nmetric s where
+  Box :: SensStaticHMatrix x y cmetric nmetric s -> BoxSHMatrix cmetric nmeric s
+
+
+-- Generate a matrix given a row and column size
+genMatrix :: forall cmetric nmetric s. (Arbitrary (SDouble nmetric s)) => Int -> Int -> Gen (BoxSHMatrix cmetric nmetric s)
+genMatrix row col = do
+  -- Generate a list of arbitrary elements of size row * col
+  elems <- replicateM ( row * col) (arbitrary @(SDouble nmetric s))
+  -- in the example they construct this from scratch 
+  -- We need to do the same otherwise we get an error
+  -- This does not work for example
+  -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
+  pure $ Box $ SensStaticHMatrixUNSAFE undefined --_ $ chunksOf col elems
