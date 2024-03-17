@@ -108,10 +108,21 @@ genMatrix row col = do
   -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
   pure $ Box $ SensStaticHMatrixUNSAFE undefined --_ $ chunksOf col elems
 
+test = do
+  (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+  (Box m1) <- generate $ genMatrix @L2 @Diff x y
+  (Box m2) <- generate $ genMatrix @L2 @Diff x y
+  pure $ plus m1 m2
 
-
-prop_plus :: Property
-prop_plus = forAll (genMatrix @L2 @Diff 3 3) $ \(Box m1) ->
-            forAll (genMatrix @L2 @Diff 3 3) $ \(Box m2) ->
+prop_plus f = forAll (genMatrix @L2 @Diff 3 3) $ \(Box m1) ->
+              forAll (genMatrix @L2 @Diff 3 3) $ \(Box m2) ->
+              True
               -- TODO
-            True
+              -- f m1 m2
+
+
+prop_plus2 :: (SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool) -> Bool
+prop_plus2 f = do
+  (Box m1) <- genMatrix @L2 @Diff 3 3
+  (Box m2) <- genMatrix @L2 @Diff 3 3
+  pure $ f m1 m2
