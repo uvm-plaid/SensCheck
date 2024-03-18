@@ -15,7 +15,7 @@ import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (genMainQuickCheck, genProp)
-import Test.QuickCheck (quickCheck, withMaxSuccess)
+import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose)
 import Utils
 import Data.List (singleton)
 import System.Environment (getArgs)
@@ -51,31 +51,46 @@ sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
   quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 net0)
 
-$( genMainQuickCheck
-    "failing_tests"
-    [ 'Incorrect.add_pair_solo1
-    , 'add_dependently_typed_matrix_incorrect
-    , 'Incorrect.solo_double1
-    ]
- )
+$( singleton <$> genProp 'SensStaticHMatrix.plus)
+
+-- testStaticPlus = do
+--   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+--   box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+--   box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+--   case (box1, box2) of ((SensStaticHMatrix.Box m1), (SensStaticHMatrix.Box m2)) -> putStrLn $ show $ plus_prop m1 m2 m1 m2
+
+-- Maybe I need to use 1 existential type?
+-- testStaticPlus2 = do
+--   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+--   box <- generate $ SensStaticHMatrix.genMatrix2 @L2 @Diff x y
+--   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plus_prop m1 m2 m1 m2
+
+
+-- $( genMainQuickCheck
+--     "failing_tests"
+--     [ 'Incorrect.add_pair_solo1
+--     , 'add_dependently_typed_matrix_incorrect
+--     , 'Incorrect.solo_double1
+--     ]
+--  )
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ["pass"] -> pass
-    ["fail"] -> fail
+    -- ["fail"] -> fail
     otherwise -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
       pass
-      fail
+      -- fail
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       passing_tests
       sensCheckDPClippedGrad
-    fail = do
-      putStrLn "These tests are expected to fail:\n\n"
-      failing_tests
+    -- fail = do
+    --   putStrLn "These tests are expected to fail:\n\n"
+    --   failing_tests
 

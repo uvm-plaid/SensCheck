@@ -89,8 +89,9 @@ transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 -- plusWithSomeNat = (withKnownNat2 plus) 5 8
 
 -- https://stackoverflow.com/questions/39755675/quickchecking-a-property-about-length-indexed-lists
-data BoxSHMatrix (cmetric :: CMetric) (nmetric :: NMetric) s where
-  Box :: SensStaticHMatrix x y cmetric nmetric s -> BoxSHMatrix cmetric nmeric s
+-- Even better https://discourse.haskell.org/t/how-to-create-arbitrary-instance-for-dependent-types/6990/39
+data BoxSHMatrix cmetric nmetric s where
+  Box :: SensStaticHMatrix x y cmetric nmetric s -> BoxSHMatrix cmetric nmetric s
 
 instance Show (BoxSHMatrix cmetric nmetric s) where
   -- Kind of hard to make this work since I need to know the size of the matrix
@@ -108,21 +109,56 @@ genMatrix row col = do
   -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
   pure $ Box $ SensStaticHMatrixUNSAFE undefined --_ $ chunksOf col elems
 
-test = do
+-- test = do
+--   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+--   (Box m1) <- generate $ genMatrix @L2 @Diff x y
+--   (Box m2) <- generate $ genMatrix @L2 @Diff x y
+--   pure $ plus m1 m2
+
+-- prop_plus f = forAll (genMatrix @L2 @Diff 3 3) $ \(Box m1) ->
+--               forAll (genMatrix @L2 @Diff 3 3) $ \(Box m2) ->
+--               True
+--               -- TODO
+--               -- f m1 m2
+
+
+-- prop_plus2 :: (SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool) -> Bool
+-- prop_plus2 f = do
+--   (Box m1) <- genMatrix @L2 @Diff 3 3
+--   (Box m2) <- genMatrix @L2 @Diff 3 3
+--   pure $ f m1 m2
+
+-- Ok well that failed so what if we have really specialized existential
+data BoxSHMatrix2 (cmetric :: CMetric) (nmetric :: NMetric) s1 s2 where
+  Box2 :: SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> BoxSHMatrix2 cmetric nmeric s1 s2
+
+instance Show (BoxSHMatrix2 cmetric nmetric s1 s2) where
+  -- Kind of hard to make this work since I need to know the size of the matrix
+  --show (Box m) = show $ unSensStaticHMatrix @1 @1 @cmetric @nmetric m
+  show (Box2 m1 m2) = "BoxSHMatrix"
+
+-- Generate a matrix given a row and column size
+genMatrix2 :: forall cmetric nmetric s1 s2. (Arbitrary (SDouble nmetric s1), Arbitrary (SDouble nmetric s2)) => Int -> Int -> Gen (BoxSHMatrix2 cmetric nmetric s1 s2)
+genMatrix2 row col = do
+  -- Generate a list of arbitrary elements of size row * col
+  elems <- replicateM ( row * col) (arbitrary @(SDouble nmetric s1))
+  -- in the example they construct this from scratch 
+  -- We need to do the same otherwise we get an error
+  -- This does not work for example
+  -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
+  pure undefined
+
+-- test = do
+--   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+--   (Box2 m1 m2) <- generate $ genMatrix2 @L2 @Diff x y
+--   pure $ plus m1 m2
+
+fake_plus_prop :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool
+fake_plus_prop _ _ _ _ = True
+
+
+testStaticPlus = do
   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
-  (Box m1) <- generate $ genMatrix @L2 @Diff x y
-  (Box m2) <- generate $ genMatrix @L2 @Diff x y
-  pure $ plus m1 m2
-
-prop_plus f = forAll (genMatrix @L2 @Diff 3 3) $ \(Box m1) ->
-              forAll (genMatrix @L2 @Diff 3 3) $ \(Box m2) ->
-              True
-              -- TODO
-              -- f m1 m2
-
-
-prop_plus2 :: (SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool) -> Bool
-prop_plus2 f = do
-  (Box m1) <- genMatrix @L2 @Diff 3 3
-  (Box m2) <- genMatrix @L2 @Diff 3 3
-  pure $ f m1 m2
+  box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fake_plus_prop m1 m1 m2 m2)
