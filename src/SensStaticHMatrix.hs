@@ -153,12 +153,12 @@ genMatrix2 row col = do
 --   (Box2 m1 m2) <- generate $ genMatrix2 @L2 @Diff x y
 --   pure $ plus m1 m2
 
-fake_plus_prop :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool
-fake_plus_prop _ _ _ _ = True
+fakePlusProp :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool
+fakePlusProp _ _ _ _ = True
 
 
 testStaticPlus = do
   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
   box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
   box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fake_plus_prop m1 m1 m2 m2)
+  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fakePlusProp m1 m1 m2 m2)

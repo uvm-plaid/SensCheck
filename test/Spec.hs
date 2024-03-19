@@ -49,7 +49,7 @@ $( singleton <$> genProp 'DpMinst.clippedGrad)
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGrad_prop trainingRows1 trainingRows2 net0)
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGradProp trainingRows1 trainingRows2 net0)
 
 $( singleton <$> genProp 'SensStaticHMatrix.plus)
 
@@ -57,13 +57,13 @@ $( singleton <$> genProp 'SensStaticHMatrix.plus)
 --   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
 --   box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
 --   box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
---   case (box1, box2) of ((SensStaticHMatrix.Box m1), (SensStaticHMatrix.Box m2)) -> putStrLn $ show $ plus_prop m1 m2 m1 m2
+--   case (box1, box2) of ((SensStaticHMatrix.Box m1), (SensStaticHMatrix.Box m2)) -> putStrLn $ show $ plusProp m1 m2 m1 m2
 
 -- Maybe I need to use 1 existential type?
 -- testStaticPlus2 = do
 --   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
 --   box <- generate $ SensStaticHMatrix.genMatrix2 @L2 @Diff x y
---   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plus_prop m1 m2 m1 m2
+--   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plusProp m1 m2 m1 m2
 
 
 -- $( genMainQuickCheck

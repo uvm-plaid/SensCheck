@@ -109,8 +109,8 @@ genProp' parseSensitiveAST functionName = do
   type_ <- reifyType functionName >>= resolveTypeSynonyms
   let (unparsedTypes, typeAsts) = parseASTs type_ parseSensitiveAST
       functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
-      -- The name of the property function we are generating. Named [functionName]_prop
-      propName = mkName $ functionNameUnqualified <> "_prop"
+      -- The name of the property function we are generating. Named [functionName]Prop
+      propName = mkName $ functionNameUnqualified <> "Prop"
 
   -- Log parsing results
   when verbose $ liftIO $ putStrLn $ "Parsed types: " <> show typeAsts <> "\n-----"
