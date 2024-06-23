@@ -1,13 +1,13 @@
 cradle:
   stack:
     - path: "./src"
-      component: "pbt-sensitivity:lib"
+      component: "SensCheck:lib"
 
     - path: "./app/Main.hs"
-      component: "pbt-sensitivity:exe:pbt-sensitivity-exe"
+      component: "SensCheck:exe:SensCheck-exe"
 
     - path: "./app/Paths_pbt_sensitivity.hs"
-      component: "pbt-sensitivity:exe:pbt-sensitivity-exe"
+      component: "SensCheck:exe:SensCheck-exe"
 
     - path: "./test"
-      component: "pbt-sensitivity:test:pbt-sensitivity-test"
+      component: "SensCheck:test:SensCheck-test"

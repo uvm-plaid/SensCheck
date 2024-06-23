@@ -1,3 +1,3 @@
-# Changelog for pbt-sensitivity
+# Changelog for SensCheck
 
 ## Unreleased changes

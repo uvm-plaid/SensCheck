@@ -157,8 +157,9 @@ fakePlusProp :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetri
 fakePlusProp _ _ _ _ = True
 
 
-testStaticPlus = do
-  (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
-  box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fakePlusProp m1 m1 m2 m2)
+-- Doesn't work either
+-- testStaticPlus = do
+  -- (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+  -- box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  -- box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  -- case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fakePlusProp m1 m1 m2 m2)
