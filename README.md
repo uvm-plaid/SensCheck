@@ -1,4 +1,4 @@
-# solo-verify
+# SensCheck
 
 ## Short description
 This is a library to verify that a Solo annotation is correct.
