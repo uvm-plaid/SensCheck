@@ -37,6 +37,7 @@ dependencies:
 - MonadRandom
 - singletons
 - singletons-base
+- reflection
 
 
 default-extensions:

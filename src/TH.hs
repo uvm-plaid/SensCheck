@@ -72,21 +72,22 @@ type SEnvName = String
 -- Given an SEnv return the associated distance statement
 type SEnvToDistance = Map SensitiveAST [GeneratedDistanceName]
 
+
+-- Calls sensCheck' with a default instance of ParseSensitiveAST
+sensCheck :: String -> [Name] -> Q [Dec]
+sensCheck = sensCheck' defaultParseSensitiveASTs
+
 -- Generates quickcheck props, tests, and a main function that runs several tests
 -- Given a list of functions that will be tested against.
 -- Output: main :: IO ()
-genMainQuickCheck' :: ParseSensitiveAST -> String -> [Name] -> Q [Dec]
-genMainQuickCheck' parseSensitiveAST mainName names = do
+sensCheck' :: ParseSensitiveAST -> String -> [Name] -> Q [Dec]
+sensCheck' parseSensitiveAST mainName names = do
   testsAndProps <- mapM (genQuickCheck parseSensitiveAST) names
   let mainName' = mkName mainName
       testNames = \case { FunD testName _ -> testName } . fst <$> testsAndProps
       doStatement = DoE Nothing $ NoBindS . VarE <$> testNames
       testAndPropsList = concatMap tuple2ToList testsAndProps
   return $ FunD mainName' [Clause [] (NormalB doStatement) []] : testAndPropsList
-
--- Calls genMainQuickCheck' with a default instance of ParseSensitiveAST
-genMainQuickCheck :: String -> [Name] -> Q [Dec]
-genMainQuickCheck = genMainQuickCheck' defaultParseSensitiveASTs
 
 -- Generates a quickcheck test for a given function
 genQuickCheck :: ParseSensitiveAST -> Name -> Q (Dec, Dec)
@@ -99,7 +100,7 @@ genQuickCheck parseSensitiveAST functionName = do
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
 
 -- Generate just the property
--- In most cases you may wish to use genMainQuickCheck for convenience
+-- In most cases you may wish to use sensCheck for convenience
 -- This might be useful if for example you want to pass arguments (that you might need IO for)
 genProp :: Name -> Q Dec
 genProp = genProp' defaultParseSensitiveASTs
@@ -175,7 +176,6 @@ type ParseError = String
 
 -- Parses template haskell's AST and returns either a SensitiveAST or a template haskell type that failed to parse.
 -- The type can potentially be a sensitive type that the user should verify.
--- TODO change this to Either Error SensitiveAST
 type ParseSensitiveAST = SensitiveTypeParams -> Type -> Maybe SensitiveAST
 
 type SensitiveTypeParams = Set Name

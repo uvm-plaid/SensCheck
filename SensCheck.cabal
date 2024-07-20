@@ -60,6 +60,7 @@ library
     , hmatrix
     , matrix
     , optparse-applicative
+    , reflection
     , safe
     , singletons
     , singletons-base
@@ -92,6 +93,7 @@ executable SensCheck-exe
     , hmatrix
     , matrix
     , optparse-applicative
+    , reflection
     , safe
     , singletons
     , singletons-base
@@ -126,6 +128,7 @@ test-suite SensCheck-test
     , hmatrix
     , matrix
     , optparse-applicative
+    , reflection
     , safe
     , singletons
     , singletons-base

@@ -14,7 +14,7 @@ import DpMinst (SGradients (..), flattenGrads, randomMnist, SameSizedSLists (Sam
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
-import TH (genMainQuickCheck, genProp)
+import TH (sensCheck, genProp)
 import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose)
 import Utils
 import Data.List (singleton)
@@ -31,7 +31,7 @@ sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
 
 -- sensStaticHMatrixPlus2 = (withKnownNat2 SensStaticHMatrix.plus 2 5)
 
-$( genMainQuickCheck
+$( sensCheck
     "passing_tests"
 
     [ 'Correct.solo_double
@@ -66,7 +66,7 @@ $( singleton <$> genProp 'SensStaticHMatrix.plus)
 --   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plusProp m1 m2 m1 m2
 
 
--- $( genMainQuickCheck
+-- $( sensCheck
 --     "failing_tests"
 --     [ 'Incorrect.add_pair_solo1
 --     , 'add_dependently_typed_matrix_incorrect

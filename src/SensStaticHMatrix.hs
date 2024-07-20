@@ -19,7 +19,7 @@ module SensStaticHMatrix where
 
 import GHC.TypeLits (Nat)
 import GHC.TypeLits qualified as TL
-import GHC.TypeNats (KnownNat)
+import GHC.TypeNats (KnownNat, SNat)
 import Numeric.LinearAlgebra.Static
 import Numeric.LinearAlgebra
     ( fromLists, Element, Transposable(tr) )
@@ -32,6 +32,7 @@ import Control.Monad (replicateM)
 import Data.Sequence (chunksOf)
 import GHC.TypeNats ( withSomeSNat )
 import GHC.Num.Natural (Natural)
+import Data.Reflection
 import Primitives (plus_cong)
 
 -- | SensStaticHMatrix is a wrapper around Numeric.LinearAlgebra.Matrix.Static
@@ -39,7 +40,6 @@ import Primitives (plus_cong)
 -- For the non dependently typed Matrix see SensHMatrix
 -- HMatrix doesn't have a functor instance so we need to instead reference the inner type directly
 -- e.g. instead of using Matrix SDouble Diff senv we create a newtype wrapper around Matrix Double
--- TODO make this less or more polymorphic
 newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (n :: NMetric) (s :: SEnv) =
   SensStaticHMatrixUNSAFE {unSensStaticHMatrix :: L x y}
 
@@ -79,14 +79,15 @@ subtract m1 m2 =
 mult :: (KnownNat x, KnownNat k, KnownNat y) => SensStaticHMatrix x k cmetric nmetric s1 -> SensStaticHMatrix k y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
--- Not sure what this is
 transpose :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix y x cmetric nmetric s1
 transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 
 
 -- plusWithSomeNat :: SensStaticHMatrix x y cmetric (SDouble metric) s1 -> SensStaticHMatrix   cmetric      (SDouble metric)      s2 -> SensStaticHMatrix      ghc-prim-0.10.0:GHC.Types.Any      ghc-prim-0.10.0:GHC.Types.Any      cmetric      (SDouble metric)      (s1 +++ s2)
--- hmm this doesn't wokr but also the type signature doesn't make sense
+-- hmm this doesn't work but also the type signature doesn't make sense
 -- plusWithSomeNat = (withKnownNat2 plus) 5 8
+
+
 
 -- https://stackoverflow.com/questions/39755675/quickchecking-a-property-about-length-indexed-lists
 -- Even better https://discourse.haskell.org/t/how-to-create-arbitrary-instance-for-dependent-types/6990/39
@@ -99,6 +100,7 @@ instance Show (BoxSHMatrix cmetric nmetric s) where
   show (Box m) = "BoxSHMatrix"
 
 -- Generate a matrix given a row and column size
+-- This generates the "existential version" of our Matrix
 genMatrix :: forall cmetric nmetric s. (Arbitrary (SDouble nmetric s)) => Int -> Int -> Gen (BoxSHMatrix cmetric nmetric s)
 genMatrix row col = do
   -- Generate a list of arbitrary elements of size row * col
@@ -128,7 +130,32 @@ genMatrix row col = do
 --   (Box m2) <- genMatrix @L2 @Diff 3 3
 --   pure $ f m1 m2
 
--- Ok well that failed so what if we have really specialized existential
+
+fakePlusProp :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool
+fakePlusProp _ _ _ _ = True
+
+
+-- Demonstration that this technique doesn't work either
+testStaticPlus = do
+  (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+  box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> 
+                        print (fakePlusProp m1 m1 m2 m2)
+  --                           ^^^^^
+  -- Compiler error:
+  -- • No instance for ‘KnownNat x’ arising from a use of ‘fakePlusProp’
+  -- Possible fix:
+  --   add (KnownNat x) to the context of
+  --     the data constructor ‘Box’
+  --     or the data constructor ‘Box’       
+  -- 
+  -- Which we don't want to require
+
+
+-- Ok well that failed so what if we have the existential version
+-- But it provides us with two matrices of the same dimension?
+-- Would need to make a different one for multiplication but let's see if this works
 data BoxSHMatrix2 (cmetric :: CMetric) (nmetric :: NMetric) s1 s2 where
   Box2 :: SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> BoxSHMatrix2 cmetric nmeric s1 s2
 
@@ -153,13 +180,21 @@ genMatrix2 row col = do
 --   (Box2 m1 m2) <- generate $ genMatrix2 @L2 @Diff x y
 --   pure $ plus m1 m2
 
-fakePlusProp :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric s2 -> Bool
-fakePlusProp _ _ _ _ = True
+-- This also doesn't work
+
+-- https://discourse.haskell.org/t/how-to-create-arbitrary-instance-for-dependent-types/6990/7?u=psilospore
+-- Let me try one more time
+-- data SomeMatrix c n s where
+--     SomeMatrix :: SNat (x :: Nat) -> SNat (y :: Nat) -> SensStaticHMatrix (x :: TL.Nat) (y :: TL.Nat) c n s -> SomeMatrix c n s
+
+-- Equivilant to:
+data SomeMatrix c n s where
+  SomeMatrix :: (KnownNat (x :: Nat), KnownNat (y :: Nat)) => SNat (y :: Nat) -> SensStaticHMatrix (x :: TL.Nat) (y :: TL.Nat) c n s -> SomeMatrix c n s
 
 
--- Doesn't work either
--- testStaticPlus = do
-  -- (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
-  -- box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  -- box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  -- case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> print (fakePlusProp m1 m1 m2 m2)
+example :: Arbitrary a => Gen (SomeMatrix c n s)
+example = do
+  i <- arbitrary
+  reifyNat i $ \(_ :: Proxy n) -> do
+    v <- replicateV @n arbitrary
+    pure (SomeMatrix v)

@@ -6,7 +6,7 @@ This is a library to verify that a Solo annotation is correct.
 ## How to use this library
 
 1. Define functions with solo type signatures. e.g. `f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)`
-2. Generate quickcheck tests for your function with `genMainQuickCheck` also providing it with the main function you would like to generate.
+2. Generate quickcheck tests for your function with `sensCheck` also providing it with the main function you would like to generate.
 3. Call the function in your test.
 
 ### Example
@@ -16,7 +16,7 @@ test/Spec.hs
 {-# LANGUAGE TemplateHaskell #-}
 
 -- Generates a function tests :: IO () that execute a generated quickcheck tests for f and any other functions
-$(genMainQuickCheck "tests" ['f])
+$(sensCheck "tests" ['f])
 
 main :: IO ()
 main = tests
