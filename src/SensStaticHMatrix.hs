@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+
 module SensStaticHMatrix where
 
 import GHC.TypeLits (Nat)
@@ -34,6 +35,7 @@ import GHC.TypeNats ( withSomeSNat )
 import GHC.Num.Natural (Natural)
 import Data.Reflection
 import Primitives (plus_cong)
+import Test.QuickCheck.Test (test)
 
 -- | SensStaticHMatrix is a wrapper around Numeric.LinearAlgebra.Matrix.Static
 -- A sensitive wrapper of HMatrix's depedendently typed Matrix

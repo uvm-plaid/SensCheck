@@ -33,7 +33,6 @@ sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
 
 $( sensCheck
     "passing_tests"
-
     [ 'Correct.solo_double
     , 'Correct.solo_plus
     , 'Correct.add_pair_solo
