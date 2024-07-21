@@ -18,7 +18,7 @@
 
 module SensStaticHMatrix where
 
-import GHC.TypeLits (Nat)
+import GHC.TypeLits (Nat, SomeNat (SomeNat))
 import GHC.TypeLits qualified as TL
 import GHC.TypeNats (KnownNat, SNat)
 import Numeric.LinearAlgebra.Static
@@ -44,6 +44,11 @@ import Test.QuickCheck.Test (test)
 -- e.g. instead of using Matrix SDouble Diff senv we create a newtype wrapper around Matrix Double
 newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (n :: NMetric) (s :: SEnv) =
   SensStaticHMatrixUNSAFE {unSensStaticHMatrix :: L x y}
+
+instance (KnownNat x, KnownNat y) => Eq (SensStaticHMatrix x y m n s) where
+  -- What on earth is this supposed to be?  L doesn't even have an Eq
+  -- instance!
+  (==) = error "Eq for SensStaticHMatrix unimplemented"
 
 
 instance (forall senv. KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x y cmetric nmetric s1) where
@@ -210,12 +215,31 @@ exampleTwo = do
     elems2 <- replicateM ( fromInteger x' * fromInteger y') (arbitrary @Double)
     pure (SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems1, SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems2)
 
+exampleThree ::
+  forall x y c n s1.
+  (KnownNat x, KnownNat y) =>
+  Gen (SensStaticHMatrix x y c n s1)
+exampleThree = do
+  elems1 <- replicateM (fromInteger (reflect (Proxy @x))) (arbitrary @Double)
+  pure (SensStaticHMatrixUNSAFE $ matrix elems1)
 
-test = do
-  (SomeMatrix m1, SomeMatrix m2) <- generate $ exampleTwo @L2 @Diff
+arbitraryKnownNat :: Gen SomeNat
+arbitraryKnownNat = do
+  x' <- arbitrary
+  reifyNat x' $ \(Proxy @x) ->
+    pure (SomeNat @x Proxy)
+
+test = generate $ do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  m1 <- exampleThree @x @y @L2 @Diff
+  m2 <- exampleThree @x @y @L2 @Diff
   pure $ (plus m1 m2) == (plus m1 m2)
---                ^^^
--- Couldn't match type ‘y1’ with ‘y’
---   Expected: SensStaticHMatrix x y L2 Diff s20
---     Actual: SensStaticHMatrix x1 y1 L2 Diff s20
 
+test2 = generate $ do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  SomeNat @z _ <- arbitraryKnownNat
+  m1 <- exampleThree @x @y @L2 @Diff
+  m2 <- exampleThree @y @z @L2 @Diff
+  pure $ (mult m1 m2) == (mult m1 m2)
