@@ -90,7 +90,6 @@ transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 
 
 -- https://stackoverflow.com/questions/39755675/quickchecking-a-property-about-length-indexed-lists
--- Even better https://discourse.haskell.org/t/how-to-create-arbitrary-instance-for-dependent-types/6990/39
 data BoxSHMatrix cmetric nmetric s where
   Box :: SensStaticHMatrix x y cmetric nmetric s -> BoxSHMatrix cmetric nmetric s
 
@@ -168,7 +167,7 @@ instance Show (BoxSHMatrix2 cmetric nmetric s1 s2) where
 genMatrix2 :: forall cmetric nmetric s1 s2. (Arbitrary (SDouble nmetric s1), Arbitrary (SDouble nmetric s2)) => Int -> Int -> Gen (BoxSHMatrix2 cmetric nmetric s1 s2)
 genMatrix2 row col = do
   -- Generate a list of arbitrary elements of size row * col
-  elems <- replicateM ( row * col) (arbitrary @(SDouble nmetric s1))
+  elems <- replicateM (row * col) (arbitrary @(SDouble nmetric s1))
   -- in the example they construct this from scratch 
   -- We need to do the same otherwise we get an error
   -- This does not work for example
@@ -183,7 +182,6 @@ genMatrix2 row col = do
 -- This also doesn't work
 
 -- https://discourse.haskell.org/t/how-to-create-arbitrary-instance-for-dependent-types/6990/7?u=psilospore
--- Let me try one more time
 -- data SomeMatrix c n s where
 --     SomeMatrix :: SNat (x :: Nat) -> SNat (y :: Nat) -> SensStaticHMatrix (x :: TL.Nat) (y :: TL.Nat) c n s -> SomeMatrix c n s
 
@@ -197,15 +195,25 @@ example = do
   x' <- arbitrary
   y' <- arbitrary
   reifyNat x' $ \(x :: Proxy x) -> reifyNat y' $ \(y :: Proxy y) -> do
-
-    -- TODO @x @y
-    -- v <- replicateV @n arbitrary
-    -- pure (SomeMatrix v)
-
     elems <- replicateM ( fromInteger x' * fromInteger y') (arbitrary @Double)
-    -- in the example they construct this from scratch 
-    -- We need to do the same otherwise we get an error
-    -- This does not work for example
-    -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
     pure $ SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems
+
+-- Generate two matrices of the same dimensions
+exampleTwo :: forall c n s1 s2. Gen (SomeMatrix c n s1, SomeMatrix c n s2)
+exampleTwo = do
+  x' <- arbitrary
+  y' <- arbitrary
+  reifyNat x' $ \(x :: Proxy x) -> reifyNat y' $ \(y :: Proxy y) -> do
+    elems1 <- replicateM ( fromInteger x' * fromInteger y') (arbitrary @Double)
+    elems2 <- replicateM ( fromInteger x' * fromInteger y') (arbitrary @Double)
+    pure (SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems1, SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems2)
+
+
+test = do
+  (SomeMatrix m1, SomeMatrix m2) <- generate $ exampleTwo @L2 @Diff
+  pure $ (plus m1 m2) == (plus m1 m2)
+--                ^^^
+-- Couldn't match type ‘y1’ with ‘y’
+--   Expected: SensStaticHMatrix x y L2 Diff s20
+--     Actual: SensStaticHMatrix x1 y1 L2 Diff s20
 
