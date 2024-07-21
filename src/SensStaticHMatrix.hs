@@ -136,12 +136,12 @@ fakePlusProp _ _ _ _ = True
 
 
 -- Demonstration that this technique doesn't work either
-testStaticPlus = do
-  (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
-  box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
-  case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> 
-                        print (fakePlusProp m1 m1 m2 m2)
+-- testStaticPlus = do
+--   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
+--   box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+--   box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
+--   case (box1, box2) of (SensStaticHMatrix.Box m1, SensStaticHMatrix.Box m2) -> 
+--                         print (fakePlusProp m1 m1 m2 m2)
   --                           ^^^^^
   -- Compiler error:
   -- • No instance for ‘KnownNat x’ arising from a use of ‘fakePlusProp’
@@ -189,12 +189,23 @@ genMatrix2 row col = do
 
 -- Equivilant to:
 data SomeMatrix c n s where
-  SomeMatrix :: (KnownNat (x :: Nat), KnownNat (y :: Nat)) => SNat (y :: Nat) -> SensStaticHMatrix (x :: TL.Nat) (y :: TL.Nat) c n s -> SomeMatrix c n s
+  SomeMatrix :: (KnownNat (x :: Nat), KnownNat (y :: Nat)) => SensStaticHMatrix (x :: TL.Nat) (y :: TL.Nat) c n s -> SomeMatrix c n s
 
 
-example :: Arbitrary a => Gen (SomeMatrix c n s)
+example :: forall c n s. Gen (SomeMatrix c n s)
 example = do
-  i <- arbitrary
-  reifyNat i $ \(_ :: Proxy n) -> do
-    v <- replicateV @n arbitrary
-    pure (SomeMatrix v)
+  x' <- arbitrary
+  y' <- arbitrary
+  reifyNat x' $ \(x :: Proxy x) -> reifyNat y' $ \(y :: Proxy y) -> do
+
+    -- TODO @x @y
+    -- v <- replicateV @n arbitrary
+    -- pure (SomeMatrix v)
+
+    elems <- replicateM ( fromInteger x' * fromInteger y') (arbitrary @Double)
+    -- in the example they construct this from scratch 
+    -- We need to do the same otherwise we get an error
+    -- This does not work for example
+    -- pure $ Box $ SensStaticHMatrixUNSAFE $ matrix elems
+    pure $ SomeMatrix @x @y $ SensStaticHMatrixUNSAFE $ matrix elems
+
