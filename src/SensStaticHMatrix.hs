@@ -243,3 +243,11 @@ test2 = generate $ do
   m1 <- exampleThree @x @y @L2 @Diff
   m2 <- exampleThree @y @z @L2 @Diff
   pure $ (mult m1 m2) == (mult m1 m2)
+
+
+genTwo = do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  m1 <- exampleThree @x @y @L2 @Diff
+  m2 <- exampleThree @x @y @L2 @Diff
+  pure (m1, m2)

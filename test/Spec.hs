@@ -65,6 +65,15 @@ $( singleton <$> genProp 'SensStaticHMatrix.plus)
 --   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plusProp m1 m2 m1 m2
 
 
+-- testStaticPlus = do
+--   SomeNat @x _ <- arbitraryKnownNat
+--   SomeNat @y _ <- arbitraryKnownNat
+--   m1 <- SensStaticHMatrix.exampleThree @x @y @L2 @Diff
+--   m2 <- SensStaticHMatrix.exampleThree @x @y @L2 @Diff
+--  quickCheck $ withMaxSuccess 100 $ plusProp m1 m2 m1 m2 
+
+testStaticPlus = quickCheck (forAll SensStaticHMatrix.genTwo plusProp)
+
 -- $( sensCheck
 --     "failing_tests"
 --     [ 'Incorrect.add_pair_solo1
