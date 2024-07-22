@@ -15,7 +15,7 @@ import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (sensCheck, genProp)
-import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose)
+import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll)
 import Utils
 import Data.List (singleton)
 import System.Environment (getArgs)
@@ -72,7 +72,14 @@ $( singleton <$> genProp 'SensStaticHMatrix.plus)
 --   m2 <- SensStaticHMatrix.exampleThree @x @y @L2 @Diff
 --  quickCheck $ withMaxSuccess 100 $ plusProp m1 m2 m1 m2 
 
-testStaticPlus = quickCheck (forAll SensStaticHMatrix.genTwo plusProp)
+testStaticPlus =
+  quickCheck
+    (forAll
+      (SensStaticHMatrix.genTwo
+         (\m1 m2 m3 m4 -> pure (plusProp m1 m2 m3 m4))
+      )
+      id
+    )
 
 -- $( sensCheck
 --     "failing_tests"

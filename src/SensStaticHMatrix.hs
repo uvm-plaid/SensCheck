@@ -245,9 +245,21 @@ test2 = generate $ do
   pure $ (mult m1 m2) == (mult m1 m2)
 
 
-genTwo = do
+genTwo ::
+  (forall n m.
+   KnownNat n =>
+   KnownNat m =>
+   SensStaticHMatrix n m L2 Diff s ->
+   SensStaticHMatrix n m L2 Diff s ->
+   SensStaticHMatrix n m L2 Diff s ->
+   SensStaticHMatrix n m L2 Diff s ->
+   Gen r) ->
+  Gen r
+genTwo cond = do
   SomeNat @x _ <- arbitraryKnownNat
   SomeNat @y _ <- arbitraryKnownNat
   m1 <- exampleThree @x @y @L2 @Diff
   m2 <- exampleThree @x @y @L2 @Diff
-  pure (m1, m2)
+  m3 <- exampleThree @x @y @L2 @Diff
+  m4 <- exampleThree @x @y @L2 @Diff
+  cond m1 m2 m3 m4
