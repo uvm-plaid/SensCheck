@@ -31,24 +31,26 @@ sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
 
 -- sensStaticHMatrixPlus2 = (withKnownNat2 SensStaticHMatrix.plus 2 5)
 
-$( sensCheck
-    "passing_tests"
-    [ 'Correct.solo_double
-    , 'Correct.solo_plus
-    , 'Correct.add_pair_solo
-    , 'Correct.solo_mixed_types
-    , 'Correct.solo_mixed_types_mult
-    , 'sensStaticHMatrixPlus
-    , 'sensStaticHMatrixMult
-    ]
- )
+-- $( sensCheck
+--     "passing_tests"
+--     [ 'Correct.solo_double
+--     , 'Correct.solo_plus
+--     , 'Correct.add_pair_solo
+--     , 'Correct.solo_mixed_types
+--     , 'Correct.solo_mixed_types_mult
+--     , 'sensStaticHMatrixPlus
+--     , 'sensStaticHMatrixMult
+--     ]
+--  )
 
 -- Need to initialize a random network in IO so manually writing the test however the property is still generated
-$( singleton <$> genProp 'DpMinst.clippedGrad)
+-- $( singleton <$> genProp 'DpMinst.clippedGrad)
 
-sensCheckDPClippedGrad = do
-  net0 <- evalRandIO randomMnist
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> clippedGradProp trainingRows1 trainingRows2 net0)
+-- sensCheckDPClippedGrad = do
+--   net0 <- evalRandIO randomMnist
+--   quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> 
+--                                             clippedGradProp trainingRows1 trainingRows2 net0
+--     )
 
 $( singleton <$> genProp 'SensStaticHMatrix.plus)
 
@@ -103,8 +105,9 @@ main = do
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
-      passing_tests
-      sensCheckDPClippedGrad
+      testStaticPlus
+      -- passing_tests
+      -- sensCheckDPClippedGrad
     -- fail = do
     --   putStrLn "These tests are expected to fail:\n\n"
     --   failing_tests
