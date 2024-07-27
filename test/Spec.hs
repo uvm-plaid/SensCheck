@@ -14,7 +14,7 @@ import DpMinst (SGradients (..), flattenGrads, randomMnist, SameSizedSLists (Sam
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
-import TH (sensCheck, genProp)
+import TH (sensCheck, sensProperty)
 import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll)
 import Utils
 import Data.List (singleton)
@@ -25,24 +25,33 @@ import qualified IncorrectAnnotations as Incorrect
 import qualified SensStaticHMatrix as SensStaticHMatrix
 
 $( sensCheck
-    "passing_tests"
+    "passingTests"
     [ 'Correct.solo_double
     , 'Correct.solo_plus
     , 'Correct.add_pair_solo
     , 'Correct.solo_mixed_types
     , 'Correct.solo_mixed_types_mult
-    , 'sensStaticHMatrixPlus
-    , 'sensStaticHMatrixMult
     ]
  )
 
-Need to initialize a random network in IO so manually writing the test however the property is still generated
-$( singleton <$> genProp 'DpMinst.clippedGrad)
+
+$( sensCheck
+    "failingTests"
+    [ 'Incorrect.add_pair_solo1
+    , 'Incorrect.solo_double1
+    ]
+ )
+
+-- The below uses the sensProperty function to generate the property
+-- Which the sensCheck function uses but these functions have slightly different bootstraping
+
+$( singleton <$> sensProperty 'DpMinst.clippedGrad)
 
 sensCheckDPClippedGrad = do
   net0 <- evalRandIO randomMnist
-  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> 
-                                            clippedGradProp trainingRows1 trainingRows2 net0
+  quickCheck $ withMaxSuccess 100 
+    (\case SameSizedSLists trainingRows1 trainingRows2 -> 
+            clippedGradProp trainingRows1 trainingRows2 net0
     )
 
 $( singleton <$> sensProperty 'SensStaticHMatrix.plus)
@@ -57,21 +66,13 @@ testStaticPlus =
       id
     )
 
-$( sensCheck
-    "failing_tests"
-    [ 'Incorrect.add_pair_solo1
-    , 'add_dependently_typed_matrix_incorrect
-    , 'Incorrect.solo_double1
-    ]
- )
-
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ["pass"] -> pass
     ["fail"] -> fail
-    otherwise -> do
+    _ -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
       pass
@@ -80,9 +81,8 @@ main = do
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       testStaticPlus
-      passing_tests
+      passingTests
       sensCheckDPClippedGrad
     fail = do
-      putStrLn "These tests are expected to fail:\n\n"
-      failing_tests
-
+      putStrLn "\nThese tests are expected to fail:\n\n"
+      failingTests
