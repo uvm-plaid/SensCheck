@@ -23,7 +23,7 @@ import GHC.TypeLits qualified as TL
 import GHC.TypeNats (KnownNat, SNat)
 import Numeric.LinearAlgebra.Static
 import Numeric.LinearAlgebra
-    ( fromLists, Element, Transposable(tr) )
+    ( fromLists, Element, Transposable(tr), Extractor (Pos) )
 import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), JoinSens, NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SList, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), ScaleSens, type (+++))
 import Utils
 import Test.QuickCheck
@@ -44,12 +44,6 @@ import Test.QuickCheck.Test (test)
 -- e.g. instead of using Matrix SDouble Diff senv we create a newtype wrapper around Matrix Double
 newtype SensStaticHMatrix (x :: Nat) (y :: Nat) (m :: CMetric) (n :: NMetric) (s :: SEnv) =
   SensStaticHMatrixUNSAFE {unSensStaticHMatrix :: L x y}
-
-instance (KnownNat x, KnownNat y) => Eq (SensStaticHMatrix x y m n s) where
-  -- What on earth is this supposed to be?  L doesn't even have an Eq
-  -- instance!
-  (==) = error "Eq for SensStaticHMatrix unimplemented"
-
 
 instance (forall senv. KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x y cmetric nmetric s1) where
    arbitrary = do
@@ -80,45 +74,33 @@ subtract m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 - unSensStaticHMatrix m2
 
 -- TODO implement scale by typelevel Nat x
--- ScaleSens  senv
+-- ScaleSens senv
+-- Why did I suggest this?
 
--- Hmm is mult +++?
+-- Hmm is mult +++? Also this isn't the correct sensitivity annotation
 mult :: (KnownNat x, KnownNat k, KnownNat y) => SensStaticHMatrix x k cmetric nmetric s1 -> SensStaticHMatrix k y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
 transpose :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix y x cmetric nmetric s1
 transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 
-exampleThree ::
+gen ::
   forall x y c n s1.
   (KnownNat x, KnownNat y) =>
   Gen (SensStaticHMatrix x y c n s1)
-exampleThree = do
-  elems1 <- replicateM (fromInteger (reflect (Proxy @x))) (arbitrary @Double)
+gen = do
+  elems1 <- replicateM (fromInteger (reflect (Proxy @x) * reflect (Proxy @y))) (arbitrary @Double)
+  Debug.traceShowM elems1
   pure (SensStaticHMatrixUNSAFE $ matrix elems1)
 
 arbitraryKnownNat :: Gen SomeNat
 arbitraryKnownNat = do
-  x' <- arbitrary
-  reifyNat x' $ \(Proxy @x) ->
+  Debug.traceM "arbitraryKnownNat1"
+  (Positive x') <- arbitrary @(Positive Integer)
+  reifyNat x' $ \(Proxy @x) -> 
     pure (SomeNat @x Proxy)
 
-test = generate $ do
-  SomeNat @x _ <- arbitraryKnownNat
-  SomeNat @y _ <- arbitraryKnownNat
-  m1 <- exampleThree @x @y @L2 @Diff
-  m2 <- exampleThree @x @y @L2 @Diff
-  pure $ (plus m1 m2) == (plus m1 m2)
-
-test2 = generate $ do
-  SomeNat @x _ <- arbitraryKnownNat
-  SomeNat @y _ <- arbitraryKnownNat
-  SomeNat @z _ <- arbitraryKnownNat
-  m1 <- exampleThree @x @y @L2 @Diff
-  m2 <- exampleThree @y @z @L2 @Diff
-  pure $ (mult m1 m2) == (mult m1 m2)
-
-
+-- Generate two of the same sized matrix
 genTwo ::
   (forall n m.
    KnownNat n =>
@@ -132,8 +114,27 @@ genTwo ::
 genTwo cond = do
   SomeNat @x _ <- arbitraryKnownNat
   SomeNat @y _ <- arbitraryKnownNat
-  m1 <- exampleThree @x @y @L2 @Diff
-  m2 <- exampleThree @x @y @L2 @Diff
-  m3 <- exampleThree @x @y @L2 @Diff
-  m4 <- exampleThree @x @y @L2 @Diff
+  m1 <- gen @x @y @L2 @Diff
+  m2 <- gen @x @y @L2 @Diff
+  m3 <- gen @x @y @L2 @Diff
+  m4 <- gen @x @y @L2 @Diff
   cond m1 m2 m3 m4
+
+-- Generate two matrices for multiplication
+genTwoMult ::
+  (forall n m k.
+   KnownNat n =>
+   KnownNat m =>
+   KnownNat k =>
+   SensStaticHMatrix n m L2 Diff s ->
+   SensStaticHMatrix m k L2 Diff s ->
+   Gen r) ->
+  Gen r
+genTwoMult cond = do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  SomeNat @z _ <- arbitraryKnownNat
+  m1 <- gen @x @y @L2 @Diff
+  m2 <- gen @y @z @L2 @Diff
+  cond m1 m2
+

@@ -102,8 +102,8 @@ genQuickCheck parseSensitiveAST functionName = do
 -- Generate just the property
 -- In most cases you may wish to use sensCheck for convenience
 -- This might be useful if for example you want to pass arguments (that you might need IO for)
-genProp :: Name -> Q Dec
-genProp = genProp' defaultParseSensitiveASTs
+sensProperty :: Name -> Q Dec
+sensProperty = genProp' defaultParseSensitiveASTs
 
 genProp' :: ParseSensitiveAST -> Name -> Q Dec
 genProp' parseSensitiveAST functionName = do

@@ -24,55 +24,29 @@ import qualified AnnotatedExternalLibrary as Correct
 import qualified IncorrectAnnotations as Incorrect
 import qualified SensStaticHMatrix as SensStaticHMatrix
 
-add_dependently_typed_matrix_incorrect = Incorrect.add_dependently_typed_matrix_solo1 @3 @4
+$( sensCheck
+    "passing_tests"
+    [ 'Correct.solo_double
+    , 'Correct.solo_plus
+    , 'Correct.add_pair_solo
+    , 'Correct.solo_mixed_types
+    , 'Correct.solo_mixed_types_mult
+    , 'sensStaticHMatrixPlus
+    , 'sensStaticHMatrixMult
+    ]
+ )
 
-sensStaticHMatrixPlus = SensStaticHMatrix.plus @3 @4 @L1 @Diff
-sensStaticHMatrixMult = SensStaticHMatrix.mult @3 @4 @5 @L1 @Diff
+Need to initialize a random network in IO so manually writing the test however the property is still generated
+$( singleton <$> genProp 'DpMinst.clippedGrad)
 
--- sensStaticHMatrixPlus2 = (withKnownNat2 SensStaticHMatrix.plus 2 5)
+sensCheckDPClippedGrad = do
+  net0 <- evalRandIO randomMnist
+  quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> 
+                                            clippedGradProp trainingRows1 trainingRows2 net0
+    )
 
--- $( sensCheck
---     "passing_tests"
---     [ 'Correct.solo_double
---     , 'Correct.solo_plus
---     , 'Correct.add_pair_solo
---     , 'Correct.solo_mixed_types
---     , 'Correct.solo_mixed_types_mult
---     , 'sensStaticHMatrixPlus
---     , 'sensStaticHMatrixMult
---     ]
---  )
-
--- Need to initialize a random network in IO so manually writing the test however the property is still generated
--- $( singleton <$> genProp 'DpMinst.clippedGrad)
-
--- sensCheckDPClippedGrad = do
---   net0 <- evalRandIO randomMnist
---   quickCheck $ withMaxSuccess 100 (\case SameSizedSLists trainingRows1 trainingRows2 -> 
---                                             clippedGradProp trainingRows1 trainingRows2 net0
---     )
-
-$( singleton <$> genProp 'SensStaticHMatrix.plus)
-
--- testStaticPlus = do
---   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
---   box1 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
---   box2 <- generate $ SensStaticHMatrix.genMatrix @L2 @Diff x y
---   case (box1, box2) of ((SensStaticHMatrix.Box m1), (SensStaticHMatrix.Box m2)) -> putStrLn $ show $ plusProp m1 m2 m1 m2
-
--- Maybe I need to use 1 existential type?
--- testStaticPlus2 = do
---   (x, y) <- generate $ (,) <$> choose (1, 10) <*> choose (1, 10)
---   box <- generate $ SensStaticHMatrix.genMatrix2 @L2 @Diff x y
---   case box of SensStaticHMatrix.Box2 m1 m2 -> putStrLn $ show $ plusProp m1 m2 m1 m2
-
-
--- testStaticPlus = do
---   SomeNat @x _ <- arbitraryKnownNat
---   SomeNat @y _ <- arbitraryKnownNat
---   m1 <- SensStaticHMatrix.exampleThree @x @y @L2 @Diff
---   m2 <- SensStaticHMatrix.exampleThree @x @y @L2 @Diff
---  quickCheck $ withMaxSuccess 100 $ plusProp m1 m2 m1 m2 
+$( singleton <$> sensProperty 'SensStaticHMatrix.plus)
+$( singleton <$> sensProperty 'SensStaticHMatrix.mult)
 
 testStaticPlus =
   quickCheck
@@ -83,32 +57,32 @@ testStaticPlus =
       id
     )
 
--- $( sensCheck
---     "failing_tests"
---     [ 'Incorrect.add_pair_solo1
---     , 'add_dependently_typed_matrix_incorrect
---     , 'Incorrect.solo_double1
---     ]
---  )
+$( sensCheck
+    "failing_tests"
+    [ 'Incorrect.add_pair_solo1
+    , 'add_dependently_typed_matrix_incorrect
+    , 'Incorrect.solo_double1
+    ]
+ )
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ["pass"] -> pass
-    -- ["fail"] -> fail
+    ["fail"] -> fail
     otherwise -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
       pass
-      -- fail
+      fail
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       testStaticPlus
-      -- passing_tests
-      -- sensCheckDPClippedGrad
-    -- fail = do
-    --   putStrLn "These tests are expected to fail:\n\n"
-    --   failing_tests
+      passing_tests
+      sensCheckDPClippedGrad
+    fail = do
+      putStrLn "These tests are expected to fail:\n\n"
+      failing_tests
 
