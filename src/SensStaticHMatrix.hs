@@ -57,31 +57,42 @@ instance (forall senv. KnownNat x, KnownNat y) => Arbitrary (SensStaticHMatrix x
 instance (KnownNat x, KnownNat y) => Show (SensStaticHMatrix x y m n s) where
   show smatrix = show $ unSensStaticHMatrix smatrix
 
--- Generate a matrix given a row and column size
--- genMatrix :: Arbitrary a => Int -> Int -> Gen (Matrix.Matrix a)
--- genMatrix row col = do
---   -- Generate a list of arbitrary elements of size row * col
---   elems <- replicateM (row * col) arbitrary
---   -- Convert to Matrix
---   pure $ Matrix.fromList row col elems
-
-plus :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
+plus :: (KnownNat x, KnownNat y) =>
+        SensStaticHMatrix x y cmetric nmetric s1 ->
+        SensStaticHMatrix x y cmetric nmetric s2 ->
+        SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 plus m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 + unSensStaticHMatrix m2
 
-subtract :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix x y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
+subtract :: (KnownNat x, KnownNat y) =>
+            SensStaticHMatrix x y cmetric nmetric s1 ->
+            SensStaticHMatrix x y cmetric nmetric s2 ->
+            SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 subtract m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 - unSensStaticHMatrix m2
 
 -- TODO implement scale by typelevel Nat x
 -- ScaleSens senv
--- Why did I suggest this?
 
--- Hmm is mult +++? Also this isn't the correct sensitivity annotation
-mult :: (KnownNat x, KnownNat k, KnownNat y) => SensStaticHMatrix x k cmetric nmetric s1 -> SensStaticHMatrix k y cmetric nmetric s2 -> SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
+-- Hmm is mult +++? Also we have unbounded sensitivity
+-- Could keep this as an incorrect example
+mult :: (KnownNat x, KnownNat k, KnownNat y) =>
+        SensStaticHMatrix x k cmetric nmetric s1 ->
+        SensStaticHMatrix k y cmetric nmetric s2 ->
+        SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
-transpose :: (KnownNat x, KnownNat y) => SensStaticHMatrix x y cmetric nmetric s1 -> SensStaticHMatrix y x cmetric nmetric s1
+-- TODO ScaleSens
+scalarMult :: forall x y scalar cmetric nmetric s.
+              (KnownNat x, KnownNat y, KnownNat scalar) => 
+              SensStaticHMatrix x y cmetric nmetric s ->
+              SensStaticHMatrix x y cmetric nmetric s
+scalarMult m1 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 * fromInteger (TL.natVal (Proxy @scalar))
+
+
+transpose :: (KnownNat x, KnownNat y) =>
+              SensStaticHMatrix x y cmetric nmetric s1 ->
+              SensStaticHMatrix y x cmetric nmetric s1
 transpose m1 = SensStaticHMatrixUNSAFE $ tr $ unSensStaticHMatrix m1
 
 gen ::
@@ -90,18 +101,16 @@ gen ::
   Gen (SensStaticHMatrix x y c n s1)
 gen = do
   elems1 <- replicateM (fromInteger (reflect (Proxy @x) * reflect (Proxy @y))) (arbitrary @Double)
-  Debug.traceShowM elems1
   pure (SensStaticHMatrixUNSAFE $ matrix elems1)
 
 arbitraryKnownNat :: Gen SomeNat
 arbitraryKnownNat = do
-  Debug.traceM "arbitraryKnownNat1"
   (Positive x') <- arbitrary @(Positive Integer)
-  reifyNat x' $ \(Proxy @x) -> 
+  reifyNat x' $ \(Proxy @x) ->
     pure (SomeNat @x Proxy)
 
--- Generate two of the same sized matrix
-genTwo ::
+-- Generate four of the same sized matrix
+genFour ::
   (forall n m.
    KnownNat n =>
    KnownNat m =>
@@ -111,7 +120,7 @@ genTwo ::
    SensStaticHMatrix n m L2 Diff s ->
    Gen r) ->
   Gen r
-genTwo cond = do
+genFour cond = do
   SomeNat @x _ <- arbitraryKnownNat
   SomeNat @y _ <- arbitraryKnownNat
   m1 <- gen @x @y @L2 @Diff
@@ -121,20 +130,42 @@ genTwo cond = do
   cond m1 m2 m3 m4
 
 -- Generate two matrices for multiplication
-genTwoMult ::
-  (forall n m k.
-   KnownNat n =>
-   KnownNat m =>
-   KnownNat k =>
-   SensStaticHMatrix n m L2 Diff s ->
-   SensStaticHMatrix m k L2 Diff s ->
+genFourMult ::
+  (forall x y z.
+   KnownNat x =>
+   KnownNat y =>
+   KnownNat z =>
+   SensStaticHMatrix x y L2 Diff s ->
+   SensStaticHMatrix y z L2 Diff s ->
+   SensStaticHMatrix x y L2 Diff s ->
+   SensStaticHMatrix y z L2 Diff s ->
    Gen r) ->
   Gen r
-genTwoMult cond = do
+genFourMult cond = do
   SomeNat @x _ <- arbitraryKnownNat
   SomeNat @y _ <- arbitraryKnownNat
   SomeNat @z _ <- arbitraryKnownNat
   m1 <- gen @x @y @L2 @Diff
   m2 <- gen @y @z @L2 @Diff
-  cond m1 m2
+  m3 <- gen @x @y @L2 @Diff
+  m4 <- gen @y @z @L2 @Diff
+  cond m1 m2 m3 m4
 
+
+genScalarMult ::
+  (forall x y scalar.
+   KnownNat x =>
+   KnownNat y =>
+   KnownNat scalar =>
+   SensStaticHMatrix x y L2 Diff s ->
+   SensStaticHMatrix x y L2 Diff s ->
+   Proxy scalar ->
+   Gen (Proxy scalar -> r)) ->
+  Gen (Proxy scalar -> r)
+genScalarMult cond = do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  SomeNat @scalar scalar <- arbitraryKnownNat
+  m1 <- gen @x @y @L2 @Diff
+  m2 <- gen @x @y @L2 @Diff
+  cond scalar m1 m2

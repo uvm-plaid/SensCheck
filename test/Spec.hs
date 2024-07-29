@@ -60,8 +60,26 @@ $( singleton <$> sensProperty 'SensStaticHMatrix.mult)
 testStaticPlus =
   quickCheck
     (forAll
-      (SensStaticHMatrix.genTwo
+      (SensStaticHMatrix.genFour
          (\m1 m2 m3 m4 -> pure (plusProp m1 m2 m3 m4))
+      )
+      id
+    )
+
+testStaticScalarMult =
+  quickCheck
+    (forAll
+      (SensStaticHMatrix.genScalar
+         (\proxy m1 m2 -> pure (scalarMultProp m1 m2))
+      )
+      id
+    )
+
+testStaticMult =
+  quickCheck
+    (forAll
+      (SensStaticHMatrix.genFourMult
+         (\m1 m2 m3 m4 -> pure (multProp m1 m2 m3 m4))
       )
       id
     )

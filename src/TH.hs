@@ -94,7 +94,7 @@ genQuickCheck :: ParseSensitiveAST -> Name -> Q (Dec, Dec)
 genQuickCheck parseSensitiveAST functionName = do
   prop <- genProp' parseSensitiveAST functionName
   let functionNameUnqualified = reverse $ takeWhile (/= '.') $ reverse $ show functionName
-      testName = mkName $ functionNameUnqualified <> "_test" -- The quickcheck function name we are generating
+      testName = mkName $ functionNameUnqualified <> "Test" -- The quickcheck function name we are generating
       (FunD propName _) = prop
   statement <- [|quickCheck (withMaxSuccess 100 $(pure $ VarE propName))|]
   pure (FunD testName [Clause [] (NormalB statement) []], prop)
