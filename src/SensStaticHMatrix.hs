@@ -71,22 +71,18 @@ subtract :: (KnownNat x, KnownNat y) =>
 subtract m1 m2 =
   SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 - unSensStaticHMatrix m2
 
--- TODO implement scale by typelevel Nat x
--- ScaleSens senv
-
--- Hmm is mult +++? Also we have unbounded sensitivity
 -- Could keep this as an incorrect example
+-- Sensitivity is unbounded here
 mult :: (KnownNat x, KnownNat k, KnownNat y) =>
         SensStaticHMatrix x k cmetric nmetric s1 ->
         SensStaticHMatrix k y cmetric nmetric s2 ->
         SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
 mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
--- TODO ScaleSens
-scalarMult :: forall x y scalar cmetric nmetric s.
+scalarMult :: forall x y scalar cmetric nmetric (s :: SEnv).
               (KnownNat x, KnownNat y, KnownNat scalar) => 
               SensStaticHMatrix x y cmetric nmetric s ->
-              SensStaticHMatrix x y cmetric nmetric s
+              SensStaticHMatrix x y cmetric nmetric (ScaleSens s scalar)
 scalarMult m1 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 * fromInteger (TL.natVal (Proxy @scalar))
 
 
@@ -152,6 +148,26 @@ genFourMult cond = do
   cond m1 m2 m3 m4
 
 
+-- genScalarMult ::
+--   (forall x y scalar.
+--    KnownNat x =>
+--    KnownNat y =>
+--    KnownNat scalar =>
+--    SensStaticHMatrix x y L2 Diff s ->
+--    SensStaticHMatrix x y L2 Diff s ->
+--    Proxy scalar ->
+--    Gen (Proxy scalar -> r)) ->
+--   Gen (Proxy scalar -> r)
+-- genScalarMult cond = do
+--   SomeNat @x _ <- arbitraryKnownNat
+--   SomeNat @y _ <- arbitraryKnownNat
+--   SomeNat @scalar scalar <- arbitraryKnownNat
+--   m1 <- gen @x @y @L2 @Diff
+--   m2 <- gen @x @y @L2 @Diff
+--   cond scalar m1 m2
+--   --   Expected: Gen (Proxy @{k} scalar -> r)
+--   --   Actual:   Gen (Proxy @{Nat} scalar0 -> r)
+
 genScalarMult ::
   (forall x y scalar.
    KnownNat x =>
@@ -160,12 +176,12 @@ genScalarMult ::
    SensStaticHMatrix x y L2 Diff s ->
    SensStaticHMatrix x y L2 Diff s ->
    Proxy scalar ->
-   Gen (Proxy scalar -> r)) ->
-  Gen (Proxy scalar -> r)
+   Gen r) ->
+  Gen r
 genScalarMult cond = do
   SomeNat @x _ <- arbitraryKnownNat
   SomeNat @y _ <- arbitraryKnownNat
   SomeNat @scalar scalar <- arbitraryKnownNat
   m1 <- gen @x @y @L2 @Diff
   m2 <- gen @x @y @L2 @Diff
-  cond scalar m1 m2
+  cond m1 m2 scalar

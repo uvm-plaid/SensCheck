@@ -56,6 +56,7 @@ sensCheckDPClippedGrad = do
 
 $( singleton <$> sensProperty 'SensStaticHMatrix.plus)
 $( singleton <$> sensProperty 'SensStaticHMatrix.mult)
+$( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult)
 
 testStaticPlus =
   quickCheck
@@ -69,8 +70,8 @@ testStaticPlus =
 testStaticScalarMult =
   quickCheck
     (forAll
-      (SensStaticHMatrix.genScalar
-         (\proxy m1 m2 -> pure (scalarMultProp m1 m2))
+      (SensStaticHMatrix.genScalarMult
+         (\m1 m2 -> pure (scalarMultProp m1 m2))
       )
       id
     )
