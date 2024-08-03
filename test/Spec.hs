@@ -55,8 +55,8 @@ sensCheckDPClippedGrad = do
     )
 
 $( singleton <$> sensProperty 'SensStaticHMatrix.plus)
-$( singleton <$> sensProperty 'SensStaticHMatrix.mult)
-$( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult)
+$( singleton <$> sensProperty 'SensStaticHMatrix.multIncorrect)
+$( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult2)
 
 testStaticPlus =
   quickCheck
@@ -70,17 +70,17 @@ testStaticPlus =
 testStaticScalarMult =
   quickCheck
     (forAll
-      (SensStaticHMatrix.genScalarMult
-         (\m1 m2 -> pure (scalarMultProp m1 m2))
+      (SensStaticHMatrix.genTwo
+         (\m1 m2 -> pure (scalarMult2Prop m1 m2))
       )
       id
     )
 
-testStaticMult =
+testStaticMultIncorrect =
   quickCheck
     (forAll
       (SensStaticHMatrix.genFourMult
-         (\m1 m2 m3 m4 -> pure (multProp m1 m2 m3 m4))
+         (\m1 m2 m3 m4 -> pure (multIncorrectProp m1 m2 m3 m4))
       )
       id
     )
@@ -100,8 +100,10 @@ main = do
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       testStaticPlus
+      testStaticScalarMult
       passingTests
       sensCheckDPClippedGrad
     fail = do
       putStrLn "\nThese tests are expected to fail:\n\n"
       failingTests
+      testStaticMultIncorrect

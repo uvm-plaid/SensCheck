@@ -72,7 +72,6 @@ type SEnvName = String
 -- Given an SEnv return the associated distance statement
 type SEnvToDistance = Map SensitiveAST [GeneratedDistanceName]
 
-
 -- Calls sensCheck' with a default instance of ParseSensitiveAST
 sensCheck :: String -> [Name] -> Q [Dec]
 sensCheck = sensCheck' defaultParseSensitiveASTs
@@ -222,8 +221,6 @@ parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
       )
       ([] :: [Type], [] :: [SensitiveAST])
       splitTypes
-
-
 
 -- Remove Forall if found
 stripForall :: Type -> Type

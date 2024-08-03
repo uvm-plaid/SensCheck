@@ -73,18 +73,27 @@ subtract m1 m2 =
 
 -- Could keep this as an incorrect example
 -- Sensitivity is unbounded here
-mult :: (KnownNat x, KnownNat k, KnownNat y) =>
+multIncorrect :: (KnownNat x, KnownNat k, KnownNat y) =>
         SensStaticHMatrix x k cmetric nmetric s1 ->
         SensStaticHMatrix k y cmetric nmetric s2 ->
         SensStaticHMatrix x y cmetric nmetric (s1 +++ s2)
-mult m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
+multIncorrect m1 m2 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 <> unSensStaticHMatrix m2
 
-scalarMult :: forall x y scalar cmetric nmetric (s :: SEnv).
-              (KnownNat x, KnownNat y, KnownNat scalar) => 
+-- | Scalar multiplication using a type level natural number
+-- The sensitivity property generated will capture the scalar type level nat and be used in the
+-- comparison of output distances where the input distance <= scalar * output distance
+scalarMult :: forall scalar x y cmetric nmetric s.
+              (KnownNat scalar, KnownNat x, KnownNat y) => 
               SensStaticHMatrix x y cmetric nmetric s ->
               SensStaticHMatrix x y cmetric nmetric (ScaleSens s scalar)
 scalarMult m1 = SensStaticHMatrixUNSAFE $ unSensStaticHMatrix m1 * fromInteger (TL.natVal (Proxy @scalar))
 
+-- | Scalar multiplication by 2
+scalarMult2 :: forall x y cmetric nmetric s.
+               (KnownNat x, KnownNat y) => 
+               SensStaticHMatrix x y cmetric nmetric s ->
+               SensStaticHMatrix x y cmetric nmetric (ScaleSens s 2)
+scalarMult2 = scalarMult @2
 
 transpose :: (KnownNat x, KnownNat y) =>
               SensStaticHMatrix x y cmetric nmetric s1 ->
@@ -104,6 +113,22 @@ arbitraryKnownNat = do
   (Positive x') <- arbitrary @(Positive Integer)
   reifyNat x' $ \(Proxy @x) ->
     pure (SomeNat @x Proxy)
+
+-- Generate two matrices of the same sized matrix
+genTwo ::
+  (forall x y scalar.
+   KnownNat x =>
+   KnownNat y =>
+   SensStaticHMatrix x y L2 Diff s ->
+   SensStaticHMatrix x y L2 Diff s ->
+   Gen r) ->
+  Gen r
+genTwo cond = do
+  SomeNat @x _ <- arbitraryKnownNat
+  SomeNat @y _ <- arbitraryKnownNat
+  m1 <- gen @x @y @L2 @Diff
+  m2 <- gen @x @y @L2 @Diff
+  cond m1 m2
 
 -- Generate four of the same sized matrix
 genFour ::
@@ -146,42 +171,3 @@ genFourMult cond = do
   m3 <- gen @x @y @L2 @Diff
   m4 <- gen @y @z @L2 @Diff
   cond m1 m2 m3 m4
-
-
--- genScalarMult ::
---   (forall x y scalar.
---    KnownNat x =>
---    KnownNat y =>
---    KnownNat scalar =>
---    SensStaticHMatrix x y L2 Diff s ->
---    SensStaticHMatrix x y L2 Diff s ->
---    Proxy scalar ->
---    Gen (Proxy scalar -> r)) ->
---   Gen (Proxy scalar -> r)
--- genScalarMult cond = do
---   SomeNat @x _ <- arbitraryKnownNat
---   SomeNat @y _ <- arbitraryKnownNat
---   SomeNat @scalar scalar <- arbitraryKnownNat
---   m1 <- gen @x @y @L2 @Diff
---   m2 <- gen @x @y @L2 @Diff
---   cond scalar m1 m2
---   --   Expected: Gen (Proxy @{k} scalar -> r)
---   --   Actual:   Gen (Proxy @{Nat} scalar0 -> r)
-
-genScalarMult ::
-  (forall x y scalar.
-   KnownNat x =>
-   KnownNat y =>
-   KnownNat scalar =>
-   SensStaticHMatrix x y L2 Diff s ->
-   SensStaticHMatrix x y L2 Diff s ->
-   Proxy scalar ->
-   Gen r) ->
-  Gen r
-genScalarMult cond = do
-  SomeNat @x _ <- arbitraryKnownNat
-  SomeNat @y _ <- arbitraryKnownNat
-  SomeNat @scalar scalar <- arbitraryKnownNat
-  m1 <- gen @x @y @L2 @Diff
-  m2 <- gen @x @y @L2 @Diff
-  cond m1 m2 scalar
