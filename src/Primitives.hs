@@ -142,6 +142,13 @@ sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
 sfoldr f init xs = undefined
 
+sfoldr' :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 s1p s2p.
+           (t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
+        -> t2 s5
+        -> SList cm t1 s4
+        -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
+sfoldr' f init xs = undefined
+
 -- this could be defined using a truncation version of "fold"
 stmap :: forall n s2 a b.
   (forall s1. a s1 -> b (TruncateSens n s1))

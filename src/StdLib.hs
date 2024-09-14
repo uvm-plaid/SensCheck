@@ -47,6 +47,25 @@ smap :: forall fn_sens a b s2 m.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap f as = sfoldr @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
 
+smap' :: forall fn_sens a b s2 m s1.
+  (a s1 -> b (ScaleSens s1 fn_sens))
+  -> SList m a s2
+  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+
+-- Not working maybe the rank 2 types are the issue?
+-- smapProp' :: 
+--   -- (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
+--   (Fun (a s1) (b (ScaleSens s1 fn_sens)))
+--   -> SList m a s2
+--   -> SList m a s2
+--   -> Bool
+-- smapProp' (Fun _ f) xs ys =
+--   let distIn = distance xs ys
+--       distOut = distance (smap f xs) (smap f ys)
+--   in distOut <= distIn
+
+
 sfilter :: (forall s. Double -> Bool)
   -> L1List (SDouble m) s1
   -> L1List (SDouble m) s1

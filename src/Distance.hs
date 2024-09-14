@@ -4,6 +4,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
+-- TODO the scaled sens stuff might have needed this. Might want to remove it eventually
+-- {-# LANGUAGE UndecidableInstances #-}
 
 module Distance where
 
@@ -15,7 +19,7 @@ import Numeric.LinearAlgebra qualified as LA
 import Numeric.LinearAlgebra.Data qualified as LAD
 import Numeric.LinearAlgebra.Static (Sized (unwrap))
 import Numeric.LinearAlgebra.Static qualified as LAS
-import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble (D_UNSAFE), SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble)
+import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble (D_UNSAFE), SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble, ScaleSens)
 import Utils (toDoubleMatrix, toDoubleMatrix')
 import SensStaticHMatrix (SensStaticHMatrix (SensStaticHMatrixUNSAFE))
 import qualified Numeric.LinearAlgebra.HMatrix as HMatrix
