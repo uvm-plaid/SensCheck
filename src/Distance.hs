@@ -44,10 +44,20 @@ instance Distance (stype senv) => Distance (SList L2 stype senv) where
 instance Distance (stype senv) => Distance (SList L1 stype senv) where
   distance (SList_UNSAFE a) (SList_UNSAFE b) = l1dist a b
 
+-- Wait just realized this shouldn't be a thing
+-- THis fails due to type family
+-- instance forall stype senv scalar scaledSens m. (Distance (stype senv), KnownNat scalar, scaledSens) => Distance (SList m stype (ScaleSens senv scalar)) where
+--   distance (SList_UNSAFE a) (SList_UNSAFE b) = undefined -- TODO what would this be?
+
+-- This fails unless we use ambigous types which causes issues
+-- Alternative 2 is to just specialize? Might be worth it then to generalize
+-- instance forall stype senv scalar scaledSens m. (Distance (stype senv), KnownNat scalar, scaledSens ~ (ScaleSens senv scalar)) => Distance (SList m stype scaledSens) where
+--   distance (SList_UNSAFE a) (SList_UNSAFE b) = undefined -- TODO what would this be?
+
+
 -- For 2 tuples with elements: (a_1, b_1) and (a_2, b_2)
 -- We need to take the following distances
 -- d(d(a_1, a_2), d(b_1, b_2))
-
 instance (Distance (stype1 senv), Distance (stype2 senv)) => Distance (SPair L2 stype1 stype2 senv) where
   distance (P_UNSAFE (al, ar)) (P_UNSAFE (bl, br)) = l2norm [distance al bl, distance ar br]
 

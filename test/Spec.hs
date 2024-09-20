@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_mixed_types_mult, solo_plus, solo_plus_incorrect)
 import Control.Monad
@@ -18,7 +19,7 @@ import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (sensCheck, sensProperty)
-import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll, Fun (..))
+import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll, Fun (..), applyFun, Function(..), functionMap, CoArbitrary (coarbitrary))
 import Utils
 import Data.List (singleton)
 import System.Environment (getArgs)
@@ -112,8 +113,8 @@ testStaticMultIncorrect =
 --   in distOut <= distIn
 
 -- Sensitive identity function
--- sid :: a s -> a (ScaleSens s 1)
--- sid x = undefined
+sid :: a s -> a (ScaleSens s 1)
+sid x = undefined
 
 -- Property of smap on the identity function
 -- idSmapProp :: forall a s2 m.
@@ -122,10 +123,6 @@ testStaticMultIncorrect =
 --   -> Bool
 -- idSmapProp = smapProp @1 sid
 
-
--- TODO reimplmenet using this: 
--- >>> let prop :: Fun String Integer -> Bool
--- >>> prop (Fun _ f) = f "monkey" == f "banana" || f "banana" == f "elephant"
 
 -- Like isSmapProp but with a random showable function using QuickCheck.Function
 -- I would expect an id like function here
@@ -139,100 +136,40 @@ testStaticMultIncorrect =
 --   in distOut <= distIn
 
 
--- Not working maybe the rank 2 types are the issue?
--- smapProp' :: 
---   -- (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
---   (Fun (a s1) (b (ScaleSens s1 fn_sens)))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap f xs) (smap f ys)
---   in distOut <= distIn
-
-
--- Confusing constraints required and fn_sens doesn't match
--- smapProp'' :: forall fn_sens a b s2 m.
---   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
---   (forall s1. Fun (a s1) (b (ScaleSens s1 fn_sens)))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp'' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap f xs) (smap f ys)
---   in distOut <= distIn -- TODO scale this
-
-
--- This complains about s1 excaping scope
--- smapProp''' :: forall fn_sens a b s2 m x f.
---   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
---   (forall s1. Fun (a s1) (b (ScaleSens s1 fn_sens)))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp''' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance @(SList m b (ScaleSens s2 (MaxNat fn_sens 1))) (smap @fn_sens @a @b @s2 @m (\x -> f x) xs) (smap @fn_sens @a @b @s2 @m (\x -> f x) ys)
---   in distOut <= distIn
-
--- What if I just move the s1 up?
--- smapProp'''' :: forall fn_sens a b s2 m s1.
---   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
---   (Fun (a s1) (b (ScaleSens s1 fn_sens)))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp'''' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance @(SList m b (ScaleSens s2 (MaxNat fn_sens 1))) (smap @fn_sens @a @b @s2 @m (f :: a s1 -> b (ScaleSens s1 fn_sens) ) xs) (smap @fn_sens @a @b @s2 @m (f :: a s1 -> b (ScaleSens s1 fn_sens)) ys)
---   in distOut <= distIn
-
--- Joe's suggestion Remove forall
--- smapProp''' ::
---   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
---   Fun (a s1) (b (ScaleSens s1 fn_sens))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp''' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap f xs) (smap f ys)
---   in distOut <= distIn
-
-
--- Joe's other suggestion
--- smapProp''' ::
---   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
---   (forall s1. Fun (a s1) (b (ScaleSens s1 fn_sens)))
---   -> SList m a s2
---   -> SList m a s2
---   -> Bool
--- smapProp''' (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap f xs) (smap f ys)
---   in distOut <= distIn
-
-
--- Alternative version of smap that doesn't have the forall
-smapProp''' :: forall fn_sens a b s2 m x f s1.
+smapProp' :: forall fn_sens a b s2 m.
   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
-  Fun (a s1) (b (ScaleSens s1 fn_sens))
+  (forall s1. Fun (a s1) (b (ScaleSens s1 fn_sens)))
   -> SList m a s2
   -> SList m a s2
   -> Bool
-smapProp''' (Fun _ f) xs ys =
+smapProp' f xs ys =
   let distIn = distance xs ys
-      distOut = distance @(SList m b (ScaleSens s2 (MaxNat fn_sens 1))) (smap' @fn_sens @a @b @s2 @m f xs) (smap' @fn_sens @a @b @s2 @m f ys)
+      distOut = 
+        distance 
+          @(SList m b (ScaleSens s2 (MaxNat fn_sens 1))) 
+          (smap @fn_sens @a @b @s2 @m (applyFun f) xs) 
+          (smap @fn_sens @a @b @s2 @m (applyFun f) ys)
   in distOut <= distIn
-
 -- testing higher order functions
 -- functionCompositionProp :: Eq c => (a -> b) -> (b -> c) -> a -> Bool
 -- functionCompositionProp f g x = (g . f) x == g (f x)
 
--- testFunctionComposition =
---   quickCheck (forAll functionCompositionProp)
+-- I forgot how to use this
+-- See https://stackoverflow.com/questions/52980636/how-to-write-quickcheck-on-properties-of-functions
+-- So we do need to make the type variables concrete when we actually test (I think)
+-- Otherwise we end up with ambigous type errors. I think that makes sense to me otherwise I'd imagine this is hard.
+
+testSmap :: IO ()
+testSmap =
+  quickCheck
+    (\(f :: Fun ((SDouble Diff) s1) (SDouble Diff (ScaleSens s1 fn_sens))) (l1 :: SList L2 (SDouble Diff) s2) (l2 :: SList L2 (SDouble Diff) s2) ->
+      smapProp' @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 f l1 l2)
+
+instance CoArbitrary (SDouble Diff s1) where
+  coarbitrary = undefined -- TODO
+
+instance Function (SDouble Diff s1) where
+  function = undefined -- TODO
 
 main :: IO ()
 main = do

@@ -230,7 +230,7 @@ stripForall t = case t of
 
 -- Collect Sensitive type params names
 collectSEnvTypeParams :: Type -> Set Name
-collectSEnvTypeParams type_ = case type_ of
+collectSEnvTypeParams type_ = Debug.traceShow type_ $ case type_ of
   ForallT typeParams _ _ -> foldr (\t acc -> case t of
       KindedTV name _ (ConT kind) -> if isSensitive kind then acc <> Set.singleton name else acc
       KindedTV name _ t' -> if appT t' then acc <> Set.singleton name else Set.empty
