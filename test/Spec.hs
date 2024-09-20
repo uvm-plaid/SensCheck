@@ -30,6 +30,7 @@ import qualified SensStaticHMatrix as SensStaticHMatrix
 import StdLib (smap)
 import Data.Kind (Type)
 import StdLib (smap')
+import qualified GHC.TypeNats as TypeNats
 
 $( sensCheck
     "passingTests"
@@ -159,11 +160,11 @@ smapProp' f xs ys =
 -- So we do need to make the type variables concrete when we actually test (I think)
 -- Otherwise we end up with ambigous type errors. I think that makes sense to me otherwise I'd imagine this is hard.
 
-testSmap :: IO ()
+testSmap :: forall (fn_sens :: TypeNats.Nat) a b s2 m. IO ()
 testSmap =
   quickCheck
-    (\(f :: Fun ((SDouble Diff) s1) (SDouble Diff (ScaleSens s1 fn_sens))) (l1 :: SList L2 (SDouble Diff) s2) (l2 :: SList L2 (SDouble Diff) s2) ->
-      smapProp' @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 f l1 l2)
+    (\(f :: Fun ((SDouble Diff) s1) (SDouble Diff (ScaleSens s1 fn_sens))) (l1 :: SList L2 (SDouble Diff) s1) (l2 :: SList L2 (SDouble Diff) s1) ->
+      smapProp' @fn_sens @(SDouble Diff) @(SDouble Diff) @s1 f l1 l2)
 
 instance CoArbitrary (SDouble Diff s1) where
   coarbitrary = undefined -- TODO
