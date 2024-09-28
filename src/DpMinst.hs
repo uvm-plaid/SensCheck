@@ -222,7 +222,6 @@ heads :: [Gradients (layer : layerTail)] -> [Gradient layer]
 heads ((grad1 :/> _) : t) = grad1 : heads t
 heads [] = []
 
--- Ditto but tail
 tails :: [Gradients (layer ': layerTail)] -> [Gradients layerTail]
 tails ((_ :/> gradt) : t) = gradt : tails t
 
