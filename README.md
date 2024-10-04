@@ -26,14 +26,22 @@ main = tests
 
 First install blas and lapack
 
+### Dependencies
+
 **Ubuntu**
 
 ```bash
 sudo apt-get install libblas-dev liblapack-dev
 ```
 
+### Build
+
+```bash
+stack build
+```
 
 ## How to run this repo
+
 ```bash
 stack test --fast
 ```

@@ -114,9 +114,7 @@ convTestDP ::
   Solo.PM (Solo.ScalePriv (Solo.TruncatePriv e Solo.Zero (s Solo.+++ s)) iterations) (Network layers shapes)
 convTestDP trainData initialNetwork rate = Solo.seqloop @iterations (runIteration trainData) initialNetwork
  where
-  runIteration trainRows i net = do
-    let trained' = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
-    trained'
+  runIteration trainRows i net = trainDP @e @s @layers @shapes @len (rate{learningRate = learningRate rate * 0.9 ^ i}) net trainRows
 
 -- training input and label (output)
 type LabeledInput shapes = (S (Head shapes), S (Last shapes))
