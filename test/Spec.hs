@@ -22,7 +22,7 @@ import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
 import TH (sensCheck, sensProperty)
-import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll, Fun (..), applyFun, Function(..), functionMap, CoArbitrary (coarbitrary))
+import Test.QuickCheck (quickCheck, withMaxSuccess, generate, choose, forAll, CoArbitrary (coarbitrary), coarbitraryReal)
 import Utils
 import Data.List (singleton)
 import System.Environment (getArgs)
@@ -30,11 +30,11 @@ import System.Environment (getArgs)
 import qualified AnnotatedExternalLibrary as Correct
 import qualified IncorrectAnnotations as Incorrect
 import qualified SensStaticHMatrix as SensStaticHMatrix
-import StdLib (smap)
+import StdLib (smap, smap', smap'')
 import Data.Kind (Type)
-import StdLib (smap')
 import qualified GHC.TypeNats as TypeNats
-import Test.QuickCheck.Function
+-- import Test.QuickCheck.Function
+import FunctionOrig
 
 $( sensCheck
     "passingTests"
@@ -157,20 +157,38 @@ smapProp' f xs ys =
   in distOut <= distIn
 
 -- Not rank2
-smapProp'' :: forall fn_sens a b s2 m.
-  (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
-  Fun (a s2) (b (ScaleSens s2 fn_sens))
-  -> SList m a s2
-  -> SList m a s2
+-- smapProp'' :: forall fn_sens a b s2 m.
+--   (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
+--   Fun (a s2) (b (ScaleSens s2 fn_sens))
+--   -> SList m a s2
+--   -> SList m a s2
+--   -> Bool
+-- smapProp'' f xs ys =
+--   let distIn = distance xs ys
+--       distOut =
+--         distance
+--           @(SList m b (ScaleSens s2 (MaxNat fn_sens 1)))
+--           (smap' @fn_sens @a @b @s2 @m (applyFun f) xs)
+--           (smap' @fn_sens @a @b @s2 @m (applyFun f) ys)
+--   in distOut <= distIn
+
+-- SDouble version not rank 2 too
+smapProp'' :: forall fn_sens s2 m c.
+  (Distance (SList m (SDouble c) s2), Distance (SList m (SDouble c) (ScaleSens s2 (MaxNat fn_sens 1)))) =>
+  Fun (SDouble c s2) (SDouble c (ScaleSens s2 fn_sens))
+  -> SList m (SDouble c) s2
+  -> SList m (SDouble c) s2
   -> Bool
 smapProp'' f xs ys =
   let distIn = distance xs ys
       distOut =
         distance
-          @(SList m b (ScaleSens s2 (MaxNat fn_sens 1)))
-          (smap' @fn_sens @a @b @s2 @m (applyFun f) xs)
-          (smap' @fn_sens @a @b @s2 @m (applyFun f) ys)
+          -- @(SList m (SDouble c) (ScaleSens s2 (MaxNat fn_sens 1)))
+          (smap'' @fn_sens @s2 @m (applyFun f) xs)
+          (smap'' @fn_sens @s2 @m (applyFun f) ys)
   in distOut <= distIn
+
+
 -- testing higher order functions
 -- functionCompositionProp :: Eq c => (a -> b) -> (b -> c) -> a -> Bool
 -- functionCompositionProp f g x = (g . f) x == g (f x)
@@ -192,13 +210,29 @@ testSmap' :: forall (fn_sens :: TypeNats.Nat) a b (s :: SEnv) m. IO ()
 testSmap' =
   quickCheck
     (\(f :: Fun ((SDouble Diff) s) (SDouble Diff (ScaleSens s fn_sens))) (l1 :: SList L2 (SDouble Diff) s) (l2 :: SList L2 (SDouble Diff) s) ->
-      smapProp'' @fn_sens @(SDouble Diff) @(SDouble Diff) @s f l1 l2)
+      smapProp'' @fn_sens f l1 l2)
 
 instance CoArbitrary (SDouble Diff s1) where
-  coarbitrary = undefined -- TODO
+  coarbitrary d = coarbitraryReal $ unSDouble d
 
-instance Function (SDouble Diff s) where
-  function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
+-- Don't think this will work. The sensitivity matters.
+-- I think the ADT used needs to carry sensitivity and well I guess the instances
+-- I think it might not be too bad to copy and pasta the module and modify it
+-- But let's make this compile for now and see what happens
+instance Function (SDouble m s) where
+  function x = let f = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational) x
+    in
+    Debug.trace ("SDouble instance: ") f-- TODO can't show <> show f) f
+
+instance Function (SDouble m) s1 s1 where
+  function x = let f = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational) x
+    in
+    Debug.trace ("SDouble instance: ") f-- TODO can't show <> show f) f
+
+instance Function (SDouble m) s1 (s1 +++ s1) where
+  function x = let f = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational) x
+    in
+    Debug.trace ("SDouble instance: ") f-- TODO can't show <> show f) f
 
 main :: IO ()
 main = do
@@ -218,7 +252,11 @@ main = do
       testStaticScalarMult
       passingTests
       sensCheckDPClippedGrad
+      testSmap'
     fail = do
       putStrLn "\nThese tests are expected to fail:\n\n"
       failingTests
       testStaticMultIncorrect
+
+
+

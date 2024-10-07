@@ -28,6 +28,8 @@ library
       AnnotatedExternalLibrary
       Distance
       DpMinst
+      Function
+      FunctionOrig
       IncorrectAnnotations
       Lib
       Primitives

@@ -27,6 +27,7 @@ import Data.Proxy
 import Sensitivity
 import Privacy
 import Primitives
+import qualified GHC.Generics
 
 
 summationFunction :: L1List (SDouble Disc) senv -> SDouble Diff (TruncateSens 1 senv)
@@ -47,12 +48,41 @@ smap :: forall fn_sens a b s2 m.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap f as = sfoldr @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
 
--- Version of smap with rank 2 types
-smap' :: forall fn_sens a b s2 m s1.
-  (a s1 -> b (ScaleSens s1 fn_sens))
-  -> SList m a s2
-  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
-smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+-- Version of smap without rank 2 types
+-- smap' :: forall fn_sens a b s2 m.
+--   (a s2 -> b (ScaleSens s2 fn_sens))
+--   -> SList m a s2
+--   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+-- smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+-- Run this as is. Test it. Then maybe use cong later to add MaxNat.
+
+--
+-- smap' :: (forall s1. f1 s1 -> f2 (ScaleSens s1 fn_sens)) -> SList m1 f1 s2 -> SList m2 f2 (ScaleSens s2 (MaxNat fn_sens 1))
+ smap' f (SList_UNSAFE l) = cong (eq_sym scale_unit) $ SList_UNSAFE $ map f l
+
+-- Do the above after figureing this out. Which is rank2
+-- smap' :: (f1 s -> f2 a) -> SList m1 f1 s -> SList m2 f2 (ScaleSens a 1)
+ -- smap' :: (f1 s1 -> f2 (ScaleSens s1 fn_sens)) -> SList m1 f1 s2 -> SList m2 f2 (ScaleSens s2 (MaxNat fn_sens 1))
+smap' :: (f1 s1 -> f2 s1) -> SList m1 f1 s1 -> SList m2 f2 s1
+smap' f (SList_UNSAFE l) = SList_UNSAFE $ map f l
+
+-- Version of smap without rank 2 types AND fixed to SDouble.
+-- I think the above doesn't work because I need to unwrap and rewrap?
+smap'' :: forall fn_sens s2 m c.
+  (SDouble c s2 -> SDouble c (ScaleSens s2 fn_sens))
+  -> SList m (SDouble c) s2
+  -> SList m (SDouble c) (ScaleSens s2 (MaxNat fn_sens 1))
+-- smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+smap'' f (SList_UNSAFE l) = SList_UNSAFE @_ @_ @(ScaleSens s2 (MaxNat fn_sens 1)) $ fmap (D_UNSAFE . unSDouble . f) l
+
+-- Version of smap without rank 2 types and fixed to SDouble.
+-- I think the above doesn't work because I need to unwrap and rewrap?
+-- smap' :: forall fn_sens a b s2 m c.
+--   (SDouble c s2 -> SDouble c (ScaleSens s2 fn_sens))
+--   -> SList m (SDouble c) s2
+--   -> SList m (SDouble c) (ScaleSens s2 (MaxNat fn_sens 1))
+-- -- smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+-- smap' f (SList_UNSAFE l) = SList_UNSAFE @_ @_ @(ScaleSens s2 (MaxNat fn_sens 1)) $ fmap (D_UNSAFE . unSDouble . f) l
 
 -- Not working maybe the rank 2 types are the issue?
 -- smapProp' :: 
