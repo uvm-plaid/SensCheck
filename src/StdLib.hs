@@ -47,7 +47,7 @@ smap :: forall fn_sens a b s2 m.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap f as = sfoldr @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
 
--- Version of smap with rank 2 types
+-- Version of smap without rank 2 types
 smap' :: forall fn_sens a b s2 m s1.
   (a s1 -> b (ScaleSens s1 fn_sens))
   -> SList m a s2

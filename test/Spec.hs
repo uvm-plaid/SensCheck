@@ -35,6 +35,7 @@ import Data.Kind (Type)
 import StdLib (smap')
 import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
+import Primitives (eq_sym, scale_unit, cong)
 
 $( sensCheck
     "passingTests"
@@ -119,7 +120,7 @@ testStaticMultIncorrect =
 
 -- Sensitive identity function
 sid :: a s -> a (ScaleSens s 1)
-sid x = undefined
+sid = cong (eq_sym scale_unit)
 
 -- Property of smap on the identity function
 -- idSmapProp :: forall a s2 m.
@@ -199,6 +200,12 @@ instance CoArbitrary (SDouble Diff s1) where
 
 instance Function (SDouble Diff s) where
   function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
+
+smapId :: SList m b s2 -> SList m b s2
+smapId = cong (eq_sym scale_unit) $ smap @1 sid
+
+slistAddConst :: SList m (SDouble Diff) s -> SList m (SDouble Diff) _
+slistAddConst = smap @1 (\x -> cong scale_unit $  D_UNSAFE $ unSDouble x + 1)
 
 main :: IO ()
 main = do
