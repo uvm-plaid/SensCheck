@@ -17,7 +17,10 @@
    ,UndecidableInstances
    ,RebindableSyntax
    ,EmptyCase
+  ,MultiParamTypeClasses
    #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module StdLib where
 import Prelude hiding (return,(>>=), sum)
 import qualified Prelude as P
@@ -27,6 +30,8 @@ import Data.Proxy
 import Sensitivity
 import Privacy
 import Primitives
+import Data.Kind (Type)
+import Test.QuickCheck (chooseInt, chooseInteger)
 
 
 summationFunction :: L1List (SDouble Disc) senv -> SDouble Diff (TruncateSens 1 senv)
@@ -53,6 +58,46 @@ smap' :: forall fn_sens a b s2 m s1.
   -> SList m a s2
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+
+-- | This emulates a higher order function similar to what QuickCheck.Function ultimately produces
+-- SensCheck call this on higher order functions
+-- TODO how would I support this for 3 or more arguments?
+class SFunction (a :: SEnv -> Type) (inSens :: SEnv) (b :: SEnv -> Type) (outputSens :: SEnv) where
+    sfunctionTable :: a inSens -> b outputSens
+
+-- A function that takes a SDouble and scales it *up to* a factor of scalar
+instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
+  sfunctionTable d =
+        let scalar = TL.natVal @scalar Proxy
+            -- TODO might want Gen Monad or just require random or something
+            -- scaleUpTo = chooseInteger (0, scalar)
+        in D_UNSAFE $ unSDouble d * fromInteger scalar
+
+instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Disc) s1 (SDouble Disc) s2 where
+  sfunctionTable d =
+        let scalar = fromIntegral $ TL.natVal (Proxy @scalar)
+            -- TODO might want Gen Monad or just require random or somethingl @scalar Proxy
+            -- scaleUpTo = chooseInteger (0, scalar)
+        in D_UNSAFE $ unSDouble d * fromInteger scalar
+
+
+-- Might be nice to write this more generically e.g. but not really needed
+-- type family Identity (s1 :: SEnv) :: SEnv where
+--   Identity s = s
+--
+-- instance (s2 ~ ScaleSens s1 1) => SFunction a s1 b s2 where
+--   -- sfunctionTable a = sfunctionTable @a @s1 @b @s1 (cong scale_unit a)
+--   -- TODO
+--   sfunctionTable = id
+--
+-- instance (s2 ~ Identity s1) => SFunction a s1 b s2 where
+--   sfunctionTable = id
+
+-- TODO probably use a type family to make a generic thing
+-- type FlipScaleSens s1 s2 = ScaleSens s2 s1
+-- instance SFunction a s1 b (FlipScaleSens 2 s1) where
+--   sfunctionTable = id
+
 
 -- Not working maybe the rank 2 types are the issue?
 -- smapProp' :: 
