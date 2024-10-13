@@ -37,6 +37,11 @@ import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
 import Primitives (eq_sym, scale_unit, cong)
 
+-- | Functions need to be instantiated with a concete type
+-- Ideally we could do this inline in the list below but that's not possible
+slistAdd42 = Correct.slistAddConst @L2 42
+smapDoubles = Correct.smapId @L2 @(SDouble Diff)
+
 $( sensCheck
     "passingTests"
     [ 'Correct.solo_double
@@ -44,6 +49,8 @@ $( sensCheck
     , 'Correct.add_pair_solo
     , 'Correct.solo_mixed_types
     , 'Correct.solo_mixed_types_mult
+    , 'smapDoubles
+    , 'slistAdd42
     ]
  )
 
@@ -118,9 +125,6 @@ testStaticMultIncorrect =
 --       distOut = distance (smap @fn_sens f xs) (smap @fn_sens f ys)
 --   in distOut <= distIn
 
--- Sensitive identity function
-sid :: a s -> a (ScaleSens s 1)
-sid = cong (eq_sym scale_unit)
 
 -- Property of smap on the identity function
 -- idSmapProp :: forall a s2 m.
@@ -201,11 +205,6 @@ instance CoArbitrary (SDouble Diff s1) where
 instance Function (SDouble Diff s) where
   function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
 
-smapId :: forall m b s2. SList m b s2 -> SList m b s2
-smapId = cong scale_unit . smap @1 sid
-
-slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
-slistAddConst  c = cong scale_unit . smap @1 (\x -> D_UNSAFE $ unSDouble x + c)
 
 main :: IO ()
 main = do

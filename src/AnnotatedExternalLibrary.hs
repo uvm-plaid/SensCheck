@@ -17,6 +17,8 @@ import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE
 import Utils
 import qualified GHC.TypeLits as TL
 import Data.Data (Proxy)
+import Primitives
+import StdLib
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -98,7 +100,6 @@ add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UN
 -- Examples with mixed types
 
 -- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
--- TODO come up with an example that's less odd
 solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
 solo_mixed_types a b chooseA = D_UNSAFE $ if chooseA then unSDouble a else unSDouble b
 
@@ -106,10 +107,18 @@ solo_mixed_types_mult :: SDouble Diff s1 -> SDouble Diff (ScaleSens s1 2)
 solo_mixed_types_mult (D_UNSAFE double) = D_UNSAFE (double * 2)
 
 -- Even more generic example
--- TODO This is going to be maybe more complex to handle
--- I need to track constraints (KnownNat n) 
 solo_mixed_types_mult_generic :: TL.KnownNat n => Proxy n -> SDouble Diff s1 -> SDouble Diff (ScaleSens s1 n)
 solo_mixed_types_mult_generic proxy (D_UNSAFE double) = D_UNSAFE (double * fromIntegral (TL.natVal proxy))
 
 solo_double :: SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
 solo_double a = D_UNSAFE $ unSDouble a + unSDouble a
+
+-- Sensitive identity function
+sid :: a s -> a (ScaleSens s 1)
+sid = cong (eq_sym scale_unit)
+
+smapId :: forall m b s2. SList m b s2 -> SList m b s2
+smapId = cong scale_unit . smap @1 sid 
+
+slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
+slistAddConst const = cong scale_unit . smap @1 (\x -> D_UNSAFE $ unSDouble x + const)
