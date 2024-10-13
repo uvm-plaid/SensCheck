@@ -201,11 +201,11 @@ instance CoArbitrary (SDouble Diff s1) where
 instance Function (SDouble Diff s) where
   function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
 
-smapId :: SList m b s2 -> SList m b s2
-smapId = cong (eq_sym scale_unit) $ smap @1 sid
+smapId :: forall m b s2. SList m b s2 -> SList m b s2
+smapId = cong scale_unit . smap @1 sid
 
-slistAddConst :: SList m (SDouble Diff) s -> SList m (SDouble Diff) _
-slistAddConst = smap @1 (\x -> cong scale_unit $  D_UNSAFE $ unSDouble x + 1)
+slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
+slistAddConst  c = cong scale_unit . smap @1 (\x -> D_UNSAFE $ unSDouble x + c)
 
 main :: IO ()
 main = do
