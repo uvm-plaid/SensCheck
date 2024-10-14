@@ -32,6 +32,7 @@ import Privacy
 import Primitives
 import Data.Kind (Type)
 import Test.QuickCheck (chooseInt, chooseInteger)
+import Data.Tuple.Singletons (Snd, Fst)
 
 
 summationFunction :: L1List (SDouble Disc) senv -> SDouble Diff (TruncateSens 1 senv)
@@ -62,7 +63,7 @@ smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs
 -- | This emulates a higher order function similar to what QuickCheck.Function ultimately produces
 -- SensCheck call this on higher order functions
 -- TODO how would I support this for 3 or more arguments?
-class SFunction (a :: SEnv -> Type) (inSens :: SEnv) (b :: SEnv -> Type) (outputSens :: SEnv) where
+class SFunction a inSens b outputSens where
     sfunctionTable :: a inSens -> b outputSens
 
 -- A function that takes a SDouble and scales it *up to* a factor of scalar
@@ -80,6 +81,47 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
             -- scaleUpTo = chooseInteger (0, scalar)
         in D_UNSAFE $ unSDouble d * fromInteger scalar
 
+-- Want to take a (s1 +++ s2) eventually
+-- instance (s2 ~ s1 +++ s1) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
+-- sfunctionTable d = undefined
+
+-- Well maybe not curry
+-- type family Curry (ab :: (SEnv -> Type,  SEnv -> Type))  :: (SEnv, SEnv) -> (Type, Type) where
+--   Curry '(a, b) = \'(sa, sb) -> '(a sa, b sb)
+
+data Pair (a :: SEnv -> Type) (b :: SEnv -> Type) (s :: (SEnv, SEnv)) where
+  Pair :: a sa -> b sb -> Pair a b '(sa, sb)
+
+type family Curry (ab :: (SEnv -> Type, SEnv -> Type)) :: (SEnv, SEnv) -> Type where
+  Curry '(a, b) = Pair a b
+--   Curry '(a, b) '(sa, sb) = '(a sa, b sb) -- Use the Pair type to satisfy (Type, Type) does not match Type
+
+-- Curried version of function
+-- Since making the recursive case is hard maybe just make the user curry the function?
+-- Could make it generic to any a,b, and c later e.g.
+-- instance (s3 ~ s1 +++ s2, ab ~ Curry '(a, b)) => SFunction ab '(s1, s2) c s3 where
+instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction ab '(s1, s2) (SDouble Diff) s3 where
+  -- TODO do something else besides just add them?
+  sfunctionTable (Pair a b) = D_UNSAFE $ unSDouble a + unSDouble b
+
+
+-- Test Smap instantating the types
+testSmap :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1) -- (ScaleSens s2 (MaxNat 1 1))
+testSmap = smap @1 (sfunctionTable @_ @_ @_ @(ScaleSens s2 1))
+
+-- testHof :: SDouble Diff (s1 +++ s2)
+-- testHof = sfunctionTable @(s1 +++ s2) (SDouble Diff, SDouble Diff)
+
+-- This is not what we really want though
+-- instance (SDouble b sb c sc, sc ~ sa +++ sb) => SFunction (SDouble a sa c sc) where
+-- sfunctionTable a = sfunctionTable @b @sb @c @sc a
+
+-- Maybe this works?
+-- instance  (SFunction a sa b sb, SFunction b sb c sc) => SFunction a sa c sc where
+--   sfunctionTable a = sfunctionTable @b @sb @c @sc (sfunctionTable @a @sa @b @sb a)
+--
+-- testHof2 :: (SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2))
+-- testRecursiveCase =
 
 -- Might be nice to write this more generically e.g. but not really needed
 -- type family Identity (s1 :: SEnv) :: SEnv where
