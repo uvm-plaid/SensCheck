@@ -21,6 +21,7 @@
    #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE InstanceSigs #-}
 module StdLib where
 import Prelude hiding (return,(>>=), sum)
 import qualified Prelude as P
@@ -60,14 +61,41 @@ smap' :: forall fn_sens a b s2 m s1.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
 
+smapWithProxy' :: forall fn_sens a b s2 m s1.
+  Proxy fn_sens
+  -> (a s1 -> b (ScaleSens s1 fn_sens))
+  -> SList m a s2
+  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+smapWithProxy' Proxy f = undefined
+
+smap'''' :: forall fn_sens a b s2 m s1.
+  (a s1 -> b (ScaleSens s1 fn_sens))
+  -> SList m a s2
+  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+smap'''' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+
+-- wrong version of smap but to test hof
+smap'' :: forall fn_sens a b s m.
+  (a s -> b s)
+  -> SList m a s
+  -> SList m b s
+smap'' f = undefined
+
+smap''' :: forall fn_sens a b s m.
+  (a s -> b s)
+  -> SList m a s
+  -> SList m b (ScaleSens s fn_sens)
+smap''' f = undefined
+
 -- | This emulates a higher order function similar to what QuickCheck.Function ultimately produces
--- SensCheck call this on higher order functions
--- TODO how would I support this for 3 or more arguments?
 class SFunction a inSens b outputSens where
     sfunctionTable :: a inSens -> b outputSens
+    -- Attempt: I added Proxy to help resolve the type of scalar which is a part of outputSens in the below instance.
+    -- sfunctionTable :: Proxy outputSens -> a inSens -> b outputSens
 
 -- A function that takes a SDouble and scales it *up to* a factor of scalar
-instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
+instance forall scalar s2 s1. (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
+  sfunctionTable :: (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SDouble Diff s1 -> SDouble Diff s2
   sfunctionTable d =
         let scalar = TL.natVal @scalar Proxy
             -- TODO might want Gen Monad or just require random or something
@@ -85,29 +113,39 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
 -- instance (s2 ~ s1 +++ s1) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
 -- sfunctionTable d = undefined
 
--- Well maybe not curry
--- type family Curry (ab :: (SEnv -> Type,  SEnv -> Type))  :: (SEnv, SEnv) -> (Type, Type) where
---   Curry '(a, b) = \'(sa, sb) -> '(a sa, b sb)
-
+-- | This is to get Curry to work. The original attempt was:
+-- Curry '(a, b) '(sa, sb) = '(a sa, b sb)
+-- But we need kind Type not kind (Type, Type)
 data Pair (a :: SEnv -> Type) (b :: SEnv -> Type) (s :: (SEnv, SEnv)) where
   Pair :: a sa -> b sb -> Pair a b '(sa, sb)
 
 type family Curry (ab :: (SEnv -> Type, SEnv -> Type)) :: (SEnv, SEnv) -> Type where
   Curry '(a, b) = Pair a b
---   Curry '(a, b) '(sa, sb) = '(a sa, b sb) -- Use the Pair type to satisfy (Type, Type) does not match Type
 
 -- Curried version of function
 -- Since making the recursive case is hard maybe just make the user curry the function?
 -- Could make it generic to any a,b, and c later e.g.
 -- instance (s3 ~ s1 +++ s2, ab ~ Curry '(a, b)) => SFunction ab '(s1, s2) c s3 where
 instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction ab '(s1, s2) (SDouble Diff) s3 where
-  -- TODO do something else besides just add them?
+  -- TODO probably not right
   sfunctionTable (Pair a b) = D_UNSAFE $ unSDouble a + unSDouble b
 
-
 -- Test Smap instantating the types
-testSmap :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1) -- (ScaleSens s2 (MaxNat 1 1))
-testSmap = smap @1 (sfunctionTable @_ @_ @_ @(ScaleSens s2 1))
+-- testSmap :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1) -- (ScaleSens s2 (MaxNat 1 1))
+-- testSmap = smap @1 (sfunctionTable @_ @_ @_ @(ScaleSens s2 1))
+
+-- Alternative attempt
+testSmap' :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1)
+testSmap' = smap' @1 @(SDouble Diff) @(SDouble Diff) (sfunctionTable @_ @s1 @_ @(ScaleSens s1 1))
+
+-- Attempt at using let binding to specify what s2 ~ is exactly in the instance
+-- Same error
+-- testSmap' :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1)
+-- testSmap' = let x  :: (foo ~ ScaleSens s1 1, TL.KnownNat 1) => SDouble Diff s1 -> SDouble Diff foo = sfunctionTable @_ @s1 @_ @(ScaleSens s1 1) (Proxy @(ScaleSens s1 1))
+--        in
+--      smap' @1 @(SDouble Diff) @(SDouble Diff) x
+
+-- testSmap' = smapWithProxy' @1 @(SDouble Diff) @(SDouble Diff) (Proxy @1) (sfunctionTable (Proxy @(ScaleSens s1 1)) @_ @s1 @_ @(ScaleSens s1 1))
 
 -- testHof :: SDouble Diff (s1 +++ s2)
 -- testHof = sfunctionTable @(s1 +++ s2) (SDouble Diff, SDouble Diff)
