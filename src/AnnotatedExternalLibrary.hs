@@ -13,7 +13,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens)
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens, MaxNat)
 import Utils
 import qualified GHC.TypeLits as TL
 import Data.Data (Proxy)
@@ -120,5 +120,22 @@ sid = cong (eq_sym scale_unit)
 smapId :: forall m b s2. SList m b s2 -> SList m b s2
 smapId = cong scale_unit . smap @1 sid 
 
+-- Example demonstrating a higher order function that is applied
 slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
 slistAddConst const = cong scale_unit . smap @1 (\x -> D_UNSAFE $ unSDouble x + const)
+
+-- | Functions need to be instantiated with a concete type (since there is an infite number of types)
+-- Ideally we could do this inline this but TH seems to have an issue
+slistAdd42 = slistAddConst @L2 42
+
+smapIdDoubles = smapId @L2 @(SDouble Diff)
+
+-- More interesting is if we support higher order functions like QuickCheck.Function described in Shrinking and showing functions: (functional pearl) Koen Claessen https://dl.acm.org/doi/10.1145/2430532.2364516
+-- We have a solution similar to QuickCheck.Function but differs since we do care about relations of intermediate types
+-- The same restriction applies on making types concrete
+
+smapSDouble :: forall fn_sens s2 m.
+  (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 fn_sens))
+  -> SList m (SDouble Diff) s2
+  -> SList m (SDouble Diff) (ScaleSens s2 (MaxNat fn_sens 1))
+smapSDouble = smap @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 @L2

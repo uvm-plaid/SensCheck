@@ -88,22 +88,21 @@ smap''' :: forall fn_sens a b s m.
 smap''' f = undefined
 
 -- | This emulates a higher order function similar to what QuickCheck.Function ultimately produces
-class SFunction a inSens b outputSens where
-    sfunctionTable :: a inSens -> b outputSens
-    -- Attempt: I added Proxy to help resolve the type of scalar which is a part of outputSens in the below instance.
-    -- sfunctionTable :: Proxy outputSens -> a inSens -> b outputSens
+-- p is a proxy that may help with type unification e.g. in the case of the ScaleSens instances
+-- If p is not needed then p
+class SFunction a inSens b outputSens p where
+    sfunctionTable :: Proxy p -> a inSens -> b outputSens
 
 -- A function that takes a SDouble and scales it *up to* a factor of scalar
-instance forall scalar s2 s1. (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
-  sfunctionTable :: (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SDouble Diff s1 -> SDouble Diff s2
-  sfunctionTable d =
+instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 scalar where
+  sfunctionTable p d =
         let scalar = TL.natVal @scalar Proxy
             -- TODO might want Gen Monad or just require random or something
             -- scaleUpTo = chooseInteger (0, scalar)
         in D_UNSAFE $ unSDouble d * fromInteger scalar
 
-instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Disc) s1 (SDouble Disc) s2 where
-  sfunctionTable d =
+instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Disc) s1 (SDouble Disc) s2 scalar where
+  sfunctionTable p d =
         let scalar = fromIntegral $ TL.natVal (Proxy @scalar)
             -- TODO might want Gen Monad or just require random or somethingl @scalar Proxy
             -- scaleUpTo = chooseInteger (0, scalar)
@@ -126,9 +125,9 @@ type family Curry (ab :: (SEnv -> Type, SEnv -> Type)) :: (SEnv, SEnv) -> Type w
 -- Since making the recursive case is hard maybe just make the user curry the function?
 -- Could make it generic to any a,b, and c later e.g.
 -- instance (s3 ~ s1 +++ s2, ab ~ Curry '(a, b)) => SFunction ab '(s1, s2) c s3 where
-instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction ab '(s1, s2) (SDouble Diff) s3 where
+instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction ab '(s1, s2) (SDouble Diff) s3 () where
   -- TODO probably not right
-  sfunctionTable (Pair a b) = D_UNSAFE $ unSDouble a + unSDouble b
+  sfunctionTable p (Pair a b) = D_UNSAFE $ unSDouble a + unSDouble b
 
 -- Test Smap instantating the types
 -- testSmap :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1) -- (ScaleSens s2 (MaxNat 1 1))
@@ -136,7 +135,7 @@ instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction
 
 -- Alternative attempt
 testSmap' :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1)
-testSmap' = smap' @1 @(SDouble Diff) @(SDouble Diff) (sfunctionTable @_ @s1 @_ @(ScaleSens s1 1))
+testSmap' = smap' @1 @(SDouble Diff) @(SDouble Diff) (sfunctionTable  @_ @s1 @_ @(ScaleSens s1 1) (Proxy @1))
 
 -- Attempt at using let binding to specify what s2 ~ is exactly in the instance
 -- Same error

@@ -40,7 +40,7 @@ import Primitives (eq_sym, scale_unit, cong)
 -- | Functions need to be instantiated with a concete type
 -- Ideally we could do this inline in the list below but that's not possible
 slistAdd42 = Correct.slistAddConst @L2 42
-smapDoubles = Correct.smapId @L2 @(SDouble Diff)
+
 
 $( sensCheck
     "passingTests"
@@ -49,8 +49,9 @@ $( sensCheck
     , 'Correct.add_pair_solo
     , 'Correct.solo_mixed_types
     , 'Correct.solo_mixed_types_mult
-    , 'smapDoubles
+    , 'smapIdDoubles
     , 'slistAdd42
+    , 'Correct.smapDoubles
     ]
  )
 

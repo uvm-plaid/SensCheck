@@ -196,8 +196,8 @@ defaultParseSensitiveASTs typeParams typ = do
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
 parseInnerSensitiveAST :: SensitiveTypeParams -> Type -> Maybe SensitiveAST
 parseInnerSensitiveAST typeParams typ = case typ of
-  (VarT name) -> if Set.member name typeParams then pure (SEnv_ name) else Nothing
-  (LitT lit) -> pure (TyLit_ lit)
+  VarT name -> if Set.member name typeParams then pure (SEnv_ name) else Nothing
+  LitT lit -> pure (TyLit_ lit)
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
     binaryOp <- nameToBinaryOp binaryOp
