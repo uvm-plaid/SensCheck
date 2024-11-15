@@ -61,6 +61,13 @@ smap' :: forall fn_sens a b s2 m s1.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
 
+-- Or maybe I wanted this?
+smap2' :: forall fn_sens a b s2 m.
+  (a s2 -> b (ScaleSens s2 fn_sens))
+  -> SList m a s2
+  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+smap2' f = sfoldr' @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] [])
+
 smapWithProxy' :: forall fn_sens a b s2 m s1.
   Proxy fn_sens
   -> (a s1 -> b (ScaleSens s1 fn_sens))
@@ -92,6 +99,12 @@ smap''' f = undefined
 -- If p is not needed then p
 class SFunction a inSens b outputSens p where
     sfunctionTable :: Proxy p -> a inSens -> b outputSens
+--                                                                               (SDouble Diff) s2 (SDouble Diff) (ScaleSens s2 1) s2’
+
+---------------------------------------------------------------------------------------------
+-- instance ((ScaleSens s2 1) ~ x) => SFunction (SDouble Diff) s2 (SDouble Diff) x 1 where --
+--   sfunctionTable p d = undefined                                                        --
+---------------------------------------------------------------------------------------------
 
 -- A function that takes a SDouble and scales it *up to* a factor of scalar
 instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 scalar where

@@ -52,6 +52,7 @@ data SensitiveAST
   | ScaleSens' SensitiveAST SensitiveAST -- n * senv
   | JoinSens' SensitiveAST SensitiveAST -- Max(s1, s2)
   | TruncateSens'
+  | SFun SensitiveAST SensitiveAST -- Function
   deriving (Show, Eq, Ord)
 
 instance Show (SensitiveAST -> SensitiveAST) where
@@ -196,7 +197,7 @@ defaultParseSensitiveASTs typeParams typ = do
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
 parseInnerSensitiveAST :: SensitiveTypeParams -> Type -> Maybe SensitiveAST
 parseInnerSensitiveAST typeParams typ = case typ of
-  VarT name -> if Set.member name typeParams then pure (SEnv_ name) else Nothing
+  VarT name -> if  Set.member name typeParams then Just (SEnv_ name) else Nothing
   LitT lit -> pure (TyLit_ lit)
   AppT (AppT (ConT binaryOp) t1) t2 -> do
     -- recursive case
@@ -204,6 +205,10 @@ parseInnerSensitiveAST typeParams typ = case typ of
     term1 <- parseInnerSensitiveAST typeParams t1
     term2 <- parseInnerSensitiveAST typeParams t2
     Just $ binaryOp term1 term2
+  AppT (AppT ArrowT t1) t2 -> do -- TODO I think...
+    term1 <- parseInnerSensitiveAST typeParams t1
+    term2 <- parseInnerSensitiveAST typeParams t2
+    Just $ SFun term1 term2
   _ -> Nothing
 
 -- Parses Template Haskell AST to a list of simplified ASTs

@@ -16,9 +16,10 @@ import Distance
 import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens, MaxNat)
 import Utils
 import qualified GHC.TypeLits as TL
-import Data.Data (Proxy)
+import Data.Data (Proxy (..))
 import Primitives
 import StdLib
+import Test.QuickCheck (Testable(property))
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -134,8 +135,35 @@ smapIdDoubles = smapId @L2 @(SDouble Diff)
 -- We have a solution similar to QuickCheck.Function but differs since we do care about relations of intermediate types
 -- The same restriction applies on making types concrete
 
-smapSDouble :: forall fn_sens s2 m.
-  (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 fn_sens))
-  -> SList m (SDouble Diff) s2
-  -> SList m (SDouble Diff) (ScaleSens s2 (MaxNat fn_sens 1))
-smapSDouble = smap @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 @L2
+-- smapSDouble :: forall fn_sens s2 m.
+--   (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 fn_sens))
+--   -> SList m (SDouble Diff) s2
+--   -> SList m (SDouble Diff) (ScaleSens s2 (MaxNat fn_sens 1))
+-- smapSDouble = smap' @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 @L2
+
+smapSDouble :: (forall (s1 :: SEnv).  SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+smapSDouble = smap @1 @(SDouble Diff) @(SDouble Diff)
+
+smap'SDouble :: (SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+smap'SDouble = smap' @1 @(SDouble Diff) @(SDouble Diff)
+
+-- smap'SDoubleFunction :: forall m s2. SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+-- smap'SDoubleFunction = smap'SDouble $ sfunctionTable (Proxy @s2)
+
+-- Get this to work
+smap2'SDouble :: (SDouble Diff s2 -> SDouble Diff (ScaleSens s2 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+smap2'SDouble = smap2' @1 @(SDouble Diff) @(SDouble Diff)
+
+-- How it might be appllied
+-- Looks like I will need to catpure the scalar and apply it for Proxy
+smap'SDoubleFunction :: forall s2. SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) (ScaleSens s2 1)
+smap'SDoubleFunction = smap2'SDouble $ sfunctionTable (Proxy @1)
+
+-- manually written property
+smap'SDoubleProp :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
+smap'SDoubleProp xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smap'SDouble (sfunctionTable (Proxy @1)) xs) (smap'SDouble (sfunctionTable (Proxy @1)) ys)
+  in distOut <= distIn
+
+-- manually written property for the actual smap

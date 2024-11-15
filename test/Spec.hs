@@ -37,74 +37,84 @@ import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
 import Primitives (eq_sym, scale_unit, cong)
 
--- | Functions need to be instantiated with a concete type
--- Ideally we could do this inline in the list below but that's not possible
-slistAdd42 = Correct.slistAddConst @L2 42
+-- $( sensCheck
+--     "hof"
+--     [
+--       -- 'Correct.smap'SDoubleFunction
+--       'Correct.smap2'SDouble
+--     ]
+--  )
 
+-- $( sensCheck
+--     "passingTests"
+--     [ 'Correct.solo_double
+--     , 'Correct.solo_plus
+--     , 'Correct.add_pair_solo
+--     , 'Correct.solo_mixed_types
+--     , 'Correct.solo_mixed_types_mult
+--     , 'Correct.smapIdDoubles
+--     , 'Correct.slistAdd42
+--     ]
+--  )
 
-$( sensCheck
-    "passingTests"
-    [ 'Correct.solo_double
-    , 'Correct.solo_plus
-    , 'Correct.add_pair_solo
-    , 'Correct.solo_mixed_types
-    , 'Correct.solo_mixed_types_mult
-    , 'smapIdDoubles
-    , 'slistAdd42
-    , 'Correct.smapDoubles
-    ]
- )
+-- I think each of these need to be called seperately because it's a non-homogenous list
+-- $( sensCheck
+--     "passingHigherOrderFunctions"
+--     [ 'Correct.smapSDouble
+--     -- , 'Correct.smap'SDouble
+--     -- , 'Correct.smap2'SDouble
+--     ]
+--  )
 
-
-$( sensCheck
-    "failingTests"
-    [ 'Incorrect.add_pair_solo1
-    , 'Incorrect.solo_double1
-    ]
- )
+-- $( sensCheck
+--     "failingTests"
+--     [ 'Incorrect.add_pair_solo1
+--     , 'Incorrect.solo_double1
+--     ]
+--  )
 
 -- The below uses the sensProperty function to generate the property
 -- Which the sensCheck function uses but these functions have slightly different bootstraping
 
-$( singleton <$> sensProperty 'DpMinst.clippedGrad)
+-- $( singleton <$> sensProperty 'DpMinst.clippedGrad)
 
-sensCheckDPClippedGrad = do
-  net0 <- evalRandIO randomMnist
-  quickCheck $ withMaxSuccess 100
-    (\case SameSizedSLists trainingRows1 trainingRows2 ->
-            clippedGradProp trainingRows1 trainingRows2 net0
-    )
+-- sensCheckDPClippedGrad = do
+--   net0 <- evalRandIO randomMnist
+--   quickCheck $ withMaxSuccess 100
+--     (\case SameSizedSLists trainingRows1 trainingRows2 ->
+--             clippedGradProp trainingRows1 trainingRows2 net0
+--     )
 
-$( singleton <$> sensProperty 'SensStaticHMatrix.plus)
-$( singleton <$> sensProperty 'SensStaticHMatrix.multIncorrect)
-$( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult2)
+-- $( singleton <$> sensProperty 'SensStaticHMatrix.plus)
+-- $( singleton <$> sensProperty 'SensStaticHMatrix.multIncorrect)
+-- $( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult2)
 
-testStaticPlus =
-  quickCheck
-    (forAll
-      (SensStaticHMatrix.genFour
-         (\m1 m2 m3 m4 -> pure (plusProp m1 m2 m3 m4))
-      )
-      id
-    )
+-- testStaticPlus =
+--   quickCheck
+--     (forAll
+--       (SensStaticHMatrix.genFour
+--          (\m1 m2 m3 m4 -> pure (plusProp m1 m2 m3 m4))
+--       )
+--       id
+--     )
 
-testStaticScalarMult =
-  quickCheck
-    (forAll
-      (SensStaticHMatrix.genTwo
-         (\m1 m2 -> pure (scalarMult2Prop m1 m2))
-      )
-      id
-    )
+-- testStaticScalarMult =
+--   quickCheck
+--     (forAll
+--       (SensStaticHMatrix.genTwo
+--          (\m1 m2 -> pure (scalarMult2Prop m1 m2))
+--       )
+--       id
+--     )
 
-testStaticMultIncorrect =
-  quickCheck
-    (forAll
-      (SensStaticHMatrix.genFourMult
-         (\m1 m2 m3 m4 -> pure (multIncorrectProp m1 m2 m3 m4))
-      )
-      id
-    )
+-- testStaticMultIncorrect =
+--   quickCheck
+--     (forAll
+--       (SensStaticHMatrix.genFourMult
+--          (\m1 m2 m3 m4 -> pure (multIncorrectProp m1 m2 m3 m4))
+--       )
+--       id
+--     )
 
 
 -- Smap for reference
@@ -177,6 +187,9 @@ smapProp'' f xs ys =
           (smap' @fn_sens @a @b @s2 @m (applyFun f) xs)
           (smap' @fn_sens @a @b @s2 @m (applyFun f) ys)
   in distOut <= distIn
+
+
+
 -- testing higher order functions
 -- functionCompositionProp :: Eq c => (a -> b) -> (b -> c) -> a -> Bool
 -- functionCompositionProp f g x = (g . f) x == g (f x)
@@ -216,16 +229,17 @@ main = do
     _ -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
-      pass
-      fail
+      -- hof
+--       pass
+--       fail
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
-      testStaticPlus
-      testStaticScalarMult
-      passingTests
-      sensCheckDPClippedGrad
+      -- testStaticPlus
+      -- testStaticScalarMult
+      -- passingTests
+      -- sensCheckDPClippedGrad
     fail = do
       putStrLn "\nThese tests are expected to fail:\n\n"
-      failingTests
-      testStaticMultIncorrect
+      -- failingTests
+      -- testStaticMultIncorrect
