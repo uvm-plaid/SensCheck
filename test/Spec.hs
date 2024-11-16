@@ -219,6 +219,7 @@ instance CoArbitrary (SDouble Diff s1) where
 instance Function (SDouble Diff s) where
   function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
 
+testSmapPropTemp = quickCheck $ withMaxSuccess 100 Correct.smapProp
 
 main :: IO ()
 main = do
@@ -229,6 +230,7 @@ main = do
     _ -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
+      testSmapPropTemp
       -- hof
 --       pass
 --       fail
