@@ -19,7 +19,6 @@ import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
 import Primitives
 import StdLib
-import Test.QuickCheck (Testable(property))
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -166,4 +165,13 @@ smap'SDoubleProp xs ys =
       distOut = distance (smap'SDouble (sfunctionTable (Proxy @1)) xs) (smap'SDouble (sfunctionTable (Proxy @1)) ys)
   in distOut <= distIn
 
--- manually written property for the actual smap
+-- How the actual smap might be applied
+smapPropFunction :: SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+smapPropFunction = smapSDouble (sfunctionTable (Proxy @1))
+
+-- manually written property
+smapProp :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
+smapProp xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smapSDouble (sfunctionTable (Proxy @1)) xs) (smapSDouble (sfunctionTable (Proxy @1)) ys)
+  in distOut <= distIn
