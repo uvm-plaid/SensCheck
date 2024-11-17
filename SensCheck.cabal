@@ -38,6 +38,7 @@ library
       Scripts
       Sensitivity
       SensStaticHMatrix
+      SFunction
       Solo2
       StdLib
       TH

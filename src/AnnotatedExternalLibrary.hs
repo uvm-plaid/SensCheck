@@ -19,6 +19,8 @@ import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
 import Primitives
 import StdLib
+import Test.QuickCheck (Gen, quickCheck)
+import SFunction
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -175,3 +177,22 @@ smapProp xs ys =
   let distIn = distance xs ys
       distOut = distance (smapSDouble (sfunctionTable (Proxy @1)) xs) (smapSDouble (sfunctionTable (Proxy @1)) ys)
   in distOut <= distIn
+
+-- What would a version with the Gen monad look like with generation
+-- We may need to return Gen Bool?
+-- smapProp' :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Gen Bool
+-- smapProp' xs ys = do
+--   f <- sfunctionTable2 (Proxy @1)
+--   let distIn = distance xs ys
+--       distOut = distance (smapSDouble f xs) (smapSDouble f ys)
+--   return $ distOut <= distIn
+
+-- Take the function as input instead not too disimilar to how Test.QuickCheck.Function works
+smapProp' :: (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
+smapProp' f xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smapSDouble f xs) (smapSDouble f ys)
+  in distOut <= distIn
+
+-- Call quickcheck on smapProp' first using Gen to generate the function
+testSmapProp = quickCheck $ smapProp' (sfunctionTable (Proxy @1))
