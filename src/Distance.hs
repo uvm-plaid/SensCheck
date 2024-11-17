@@ -107,6 +107,5 @@ l2dist :: Distance a => [a] -> [a] -> Double
 l2dist x y = l2norm $ uncurry distance <$> zip x y
 
 -- L2 norm of a Matrix
--- TODO remove?
 norm_2 :: Floating n => Matrix.Matrix n -> n
 norm_2 m = sqrt $ foldr (\x acc -> acc + abs x ** 2) 0 m

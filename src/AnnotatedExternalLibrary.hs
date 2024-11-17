@@ -19,7 +19,7 @@ import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
 import Primitives
 import StdLib
-import Test.QuickCheck (Gen, quickCheck)
+import Test.QuickCheck (Gen, quickCheck, forAll)
 import SFunction
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
@@ -180,8 +180,9 @@ smapProp xs ys =
 
 -- What would a version with the Gen monad look like with generation
 -- We may need to return Gen Bool?
--- smapProp' :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Gen Bool
--- smapProp' xs ys = do
+-- smapProp'' :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Gen Bool
+-- smapProp'' xs ys = do
+-- -- This does not type check
 --   f <- sfunctionTable2 (Proxy @1)
 --   let distIn = distance xs ys
 --       distOut = distance (smapSDouble f xs) (smapSDouble f ys)
@@ -195,4 +196,19 @@ smapProp' f xs ys =
   in distOut <= distIn
 
 -- Call quickcheck on smapProp' first using Gen to generate the function
-testSmapProp = quickCheck $ smapProp' (sfunctionTable (Proxy @1))
+-- testSmapProp = forAll (sfunctionTable2 (Proxy @1)) $ \f -> smapProp' f
+
+-- Gets inferred as
+-- f :: SDouble 'Diff Any -> SDouble 'Diff (ScaleSens Any 1)
+-- What if I add more type hints
+-- testSmapProp' = forAll (sfunctionTable2 (Proxy @1)) $ \(f :: forall s1. SDouble 'Diff s1 -> SDouble 'Diff (ScaleSens s1 1)) -> smapProp' f
+
+-- Ok that's sad but I could maybe generate a random number (via quickcheck) and pass it in
+-- This does work
+smapProp'' :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
+smapProp'' randomNumber xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smapSDouble (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDouble (sfunctionTable3 (Proxy @1) randomNumber) ys)
+  in distOut <= distIn
+
+smapPropMain = quickCheck smapProp''
