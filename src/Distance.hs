@@ -6,9 +6,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
--- TODO the scaled sens stuff might have needed this. Might want to remove it eventually
--- {-# LANGUAGE UndecidableInstances #-}
-
 module Distance where
 
 import Data.Matrix qualified as Matrix

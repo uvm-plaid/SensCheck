@@ -14,7 +14,6 @@
    ,TypeOperators
    ,TypeSynonymInstances
    ,TypeFamilyDependencies
-   ,UndecidableInstances
    ,RebindableSyntax
    ,EmptyCase
   ,MultiParamTypeClasses
