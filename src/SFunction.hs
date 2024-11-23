@@ -65,7 +65,7 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
 
   sfunctionTable3 p randomValue d =
        let scalar = TL.natVal p
-           scaleFactor = randomValue `mod'` (fromIntegral scalar)
+           scaleFactor = randomValue `mod'` fromIntegral scalar
        in D_UNSAFE $ unSDouble d * scaleFactor
 
 instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Disc) s1 (SDouble Disc) s2 scalar where

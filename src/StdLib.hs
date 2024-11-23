@@ -55,6 +55,31 @@ smap :: forall fn_sens a b s2 m.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap f as = sfoldr @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
 
+class SPrimitive a b where
+        wrap :: forall s. a -> b s
+        unwrap :: forall s. b s -> a
+
+instance SPrimitive Double (SDouble m) where
+  wrap = D_UNSAFE
+  unwrap = unSDouble
+
+-- smap without foldr
+-- to do this we can unwrap and wrap SList
+-- however we also need to unwrap and rewrap the type a then
+-- which is unknown
+smap_ :: forall fn_sens a b s2 m unsensa unsensb. (SPrimitive unsensa a, SPrimitive unsensb b) =>
+  (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
+  -> SList m a s2
+  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+smap_ f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @unsensb @b) . unwrap . f <$> l
+
+-- TODO now write a test
+
+-- So let's write a specialized version
+-- This works but isn't polymorphic now :(
+smapSDouble_ :: (forall (s1 :: SEnv).  SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
+smapSDouble_ f (SList_UNSAFE l) = SList_UNSAFE $ D_UNSAFE . unSDouble . f <$> l
+
 -- Version of smap without rank 2 types
 smap' :: forall fn_sens a b s2 m s1.
   (a s1 -> b (ScaleSens s1 fn_sens))

@@ -230,7 +230,8 @@ main = do
     _ -> do
       putStrLn "Defaulting to running all tests."
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
-      testSmapPropTemp
+      -- testSmapPropTemp
+      Correct.smapPropMain
       -- hof
 --       pass
 --       fail

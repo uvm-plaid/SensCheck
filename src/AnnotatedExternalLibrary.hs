@@ -208,7 +208,8 @@ smapProp' f xs ys =
 smapProp'' :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
 smapProp'' randomNumber xs ys =
   let distIn = distance xs ys
-      distOut = distance (smapSDouble (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDouble (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      distOut = distance (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
   in distOut <= distIn
 
+smapPropMain :: IO ()
 smapPropMain = quickCheck smapProp''
