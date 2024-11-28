@@ -6,6 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE PolyKinds#-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module AnnotatedExternalLibrary where
 
@@ -21,6 +23,7 @@ import Primitives
 import StdLib
 import Test.QuickCheck (Gen, quickCheck, forAll)
 import SFunction
+import GHC.Base (Type)
 
 {- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
  Also includes examples of manually generated props
@@ -120,7 +123,7 @@ sid :: a s -> a (ScaleSens s 1)
 sid = cong (eq_sym scale_unit)
 
 smapId :: forall m b s2. SList m b s2 -> SList m b s2
-smapId = cong scale_unit . smap @1 sid 
+smapId = cong scale_unit . smap @1 sid
 
 -- Example demonstrating a higher order function that is applied
 slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
@@ -211,5 +214,32 @@ smapProp'' randomNumber xs ys =
       distOut = distance (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
   in distOut <= distIn
 
-smapPropMain :: IO ()
-smapPropMain = quickCheck smapProp''
+-- TODO now write a test for smap_ similar to the above
+-- THat should test a 1 sensitive function
+-- smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m unsensa unsensb s1.
+--   (SPrimitive unsensa a, SPrimitive unsensb b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1) =>
+--   Double -> SList m a s2 -> SList m a s2 -> Bool
+-- smapProp1''' randomNumber xs ys =
+--   let distIn = distance xs ys
+--       -- I would expect it to work just like above but...
+--       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       --distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsens (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- Maybe I can do a wrap and unwrap TODO?
+--       distOut = distance (smap_ (\(x :: a s1) -> wrap $ unwrap $ sfunctionTable3 (Proxy @1) randomNumber x) xs) (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--   in distOut <= distIn
+
+-- Let me try a non-rank two version
+noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m unsensa unsensb.
+  (SPrimitive unsensa a, SPrimitive unsensb b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s2 b (ScaleSens s2 1) 1) =>
+  Double -> SList m a s2 -> SList m a s2 -> Bool
+noRank2SmapProp randomNumber xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_NoRank2 @1 @a @b @s2 @m @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
+  in distOut <= distIn
+
+-- smapPropMain :: IO ()
+-- smapPropMain = quickCheck $ smapProp''' @1 @SDouble @SDouble
+
+noRank2SmapPropMain :: IO ()
+noRank2SmapPropMain = quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2 @Double @Double

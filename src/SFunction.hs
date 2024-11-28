@@ -1,6 +1,5 @@
 {-# LANGUAGE
-    AllowAmbiguousTypes
-   ,DataKinds
+    DataKinds
    ,FlexibleContexts
    ,GADTs
    ,GeneralizedNewtypeDeriving
