@@ -225,8 +225,8 @@ smapProp'' randomNumber xs ys =
 --       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
 --       --distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
 --       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsens (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       -- Maybe I can do a wrap and unwrap TODO?
---       distOut = distance (smap_ (\(x :: a s1) -> wrap $ unwrap $ sfunctionTable3 (Proxy @1) randomNumber x) xs) (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- Maybe I can do a wrap and unwrap. Uhh this is hard
+--       -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @unsensb @b) $ unwrap @unsensb @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @unsensa @a $ unwrap @unsensa @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
 --   in distOut <= distIn
 
 -- Let me try a non-rank two version
@@ -242,4 +242,6 @@ noRank2SmapProp randomNumber xs ys =
 -- smapPropMain = quickCheck $ smapProp''' @1 @SDouble @SDouble
 
 noRank2SmapPropMain :: IO ()
-noRank2SmapPropMain = quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2 @Double @Double
+noRank2SmapPropMain = do
+  quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2 @Double @Double
+  -- quickCheck $ noRank2SmapProp @(SDouble Disc) @(SDouble Disc) @_ @L2 @Double @Double

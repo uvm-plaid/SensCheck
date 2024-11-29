@@ -78,9 +78,8 @@ smap_NoRank2 :: forall fn_sens a b s2 m unsensa unsensb. (SPrimitive unsensa a, 
   (a s2 -> b (ScaleSens s2 fn_sens))
   -> SList m a s2
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
+
 smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @unsensb @b) . unwrap . f <$> l
--- smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @unsensb @b) . unwrap . f . unwrap @unsensa @a <$> l
--- I don't need                                                                  this ^^^^
 
 sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 unsenst1 unsenst2. (SPrimitive unsenst1 t1, SPrimitive unsenst2 t2) =>
            (forall s1p s2p.
