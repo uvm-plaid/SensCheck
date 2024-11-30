@@ -20,6 +20,7 @@
    #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module StdLib where
 
@@ -55,12 +56,16 @@ smap :: forall fn_sens a b s2 m.
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap f as = sfoldr @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
 
-class SPrimitive a b where
-        wrap :: forall s. a -> b s
-        unwrap :: forall s. b s -> a
+class SPrimitive b where
+  type Unsens b
+  wrap :: forall s. Unsens b -> b s
+  unwrap :: forall s. b s -> Unsens b
 
-instance SPrimitive Double (SDouble m) where
+instance SPrimitive (SDouble m) where
+  type Unsens (SDouble m) = Double
+  wrap :: Double -> SDouble m s
   wrap = D_UNSAFE
+  unwrap :: SDouble m s -> Double
   unwrap = unSDouble
 
 -- smap without foldr
@@ -68,26 +73,26 @@ instance SPrimitive Double (SDouble m) where
 -- however we also need to unwrap and rewrap the type a then
 -- which is unknown
 -- Turns out Solo might not have made the right assumption about implementing primative higher order functions
-smap_ :: forall fn_sens a b s2 m unsensa unsensb. (SPrimitive unsensa a, SPrimitive unsensb b) =>
+smap_ :: forall fn_sens a b s2 m . (SPrimitive a, SPrimitive b) =>
   (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
   -> SList m a s2
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
-smap_ f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @unsensb @b) . unwrap . f <$> l
+smap_ f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @b) . unwrap . f <$> l
 
-smap_NoRank2 :: forall fn_sens a b s2 m unsensa unsensb. (SPrimitive unsensa a, SPrimitive unsensb b) =>
+smap_NoRank2 :: forall fn_sens a b s2 m . (SPrimitive a, SPrimitive b) =>
   (a s2 -> b (ScaleSens s2 fn_sens))
   -> SList m a s2
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 
-smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @unsensb @b) . unwrap . f <$> l
+smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @b) . unwrap . f <$> l
 
-sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 unsenst1 unsenst2. (SPrimitive unsenst1 t1, SPrimitive unsenst2 t2) =>
+sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
            (forall s1p s2p.
             t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
         -> t2 s5 -- Initial Acc
         -> SList cm t1 s4
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
-sfoldr_ f init (SList_UNSAFE xs) = wrap @unsenst2 @t2 $ unwrap $ foldr (\x acc -> wrap @unsenst2 @t2 . unwrap $ f x acc ) init xs
+sfoldr_ f init (SList_UNSAFE xs) = wrap @t2 $ unwrap $ foldr (\x acc -> wrap @t2 . unwrap $ f x acc ) init xs
 -- TODO now write a test for sfoldr_ and smap_
 
 -- So let's write a specialized version

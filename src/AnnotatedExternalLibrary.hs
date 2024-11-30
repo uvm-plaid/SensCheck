@@ -231,11 +231,11 @@ smapProp'' randomNumber xs ys =
 
 -- Let me try a non-rank two version
 noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m unsensa unsensb.
-  (SPrimitive unsensa a, SPrimitive unsensb b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s2 b (ScaleSens s2 1) 1) =>
+  (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s2 b (ScaleSens s2 1) 1) =>
   Double -> SList m a s2 -> SList m a s2 -> Bool
 noRank2SmapProp randomNumber xs ys =
   let distIn = distance xs ys
-      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_NoRank2 @1 @a @b @s2 @m @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
   in distOut <= distIn
 
 -- smapPropMain :: IO ()
