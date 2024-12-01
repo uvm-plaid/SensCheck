@@ -216,18 +216,31 @@ smapProp'' randomNumber xs ys =
 
 -- TODO now write a test for smap_ similar to the above
 -- THat should test a 1 sensitive function
--- smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m unsensa unsensb s1.
---   (SPrimitive unsensa a, SPrimitive unsensb b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1) =>
---   Double -> SList m a s2 -> SList m a s2 -> Bool
--- smapProp1''' randomNumber xs ys =
---   let distIn = distance xs ys
---       -- I would expect it to work just like above but...
---       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       --distOut = distance (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ @unsensa @unsensb (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       -- distOut = distance (smap_ @1 @a @b @_ @_ @unsens (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       -- Maybe I can do a wrap and unwrap. Uhh this is hard
---       -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @unsensb @b) $ unwrap @unsensb @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @unsensa @a $ unwrap @unsensa @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
---   in distOut <= distIn
+smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m s1.
+  (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1, SFunction a s2 b (ScaleSens s2 1) 1) =>
+  Double -> SList m a s2 -> SList m a s2 -> Bool
+smapProp1''' randomNumber xs ys =
+  let distIn = distance xs ys
+      -- I would expect it to work just like above but...
+      -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+      --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      --                                         ^^ Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1
+      -- s4 is the rank 2 type variable so this sorta makes sense
+
+      -- Maybe unwrap and wrap like before?
+      distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+                         (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+
+      -- OLD attempts
+
+      -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+      --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+
+      --distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      -- distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      -- Maybe I can do a wrap and unwrap. Uhh this is hard
+      -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @b) $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+  in distOut <= distIn
 
 -- Let me try a non-rank two version
 noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m.
@@ -235,7 +248,8 @@ noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m.
   Double -> SList m a s2 -> SList m a s2 -> Bool
 noRank2SmapProp randomNumber xs ys =
   let distIn = distance xs ys
-      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+                         (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
   in distOut <= distIn
 
 -- smapPropMain :: IO ()
