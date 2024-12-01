@@ -230,7 +230,7 @@ smapProp'' randomNumber xs ys =
 --   in distOut <= distIn
 
 -- Let me try a non-rank two version
-noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m unsensa unsensb.
+noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m.
   (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s2 b (ScaleSens s2 1) 1) =>
   Double -> SList m a s2 -> SList m a s2 -> Bool
 noRank2SmapProp randomNumber xs ys =
@@ -243,5 +243,5 @@ noRank2SmapProp randomNumber xs ys =
 
 noRank2SmapPropMain :: IO ()
 noRank2SmapPropMain = do
-  quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2 @Double @Double
+  quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2
   -- quickCheck $ noRank2SmapProp @(SDouble Disc) @(SDouble Disc) @_ @L2 @Double @Double
