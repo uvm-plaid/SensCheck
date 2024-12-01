@@ -216,31 +216,49 @@ smapProp'' randomNumber xs ys =
 
 -- TODO now write a test for smap_ similar to the above
 -- THat should test a 1 sensitive function
-smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m s1.
-  (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1, SFunction a s2 b (ScaleSens s2 1) 1) =>
-  Double -> SList m a s2 -> SList m a s2 -> Bool
-smapProp1''' randomNumber xs ys =
-  let distIn = distance xs ys
-      -- I would expect it to work just like above but...
-      -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
-      --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
-      --                                         ^^ Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1
-      -- s4 is the rank 2 type variable so this sorta makes sense
+-- smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m s1.
+--   (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1, SFunction a s2 b (ScaleSens s2 1) 1) =>
+--   Double -> SList m a s2 -> SList m a s2 -> Bool
+-- smapProp1''' randomNumber xs ys =
+--   let distIn = distance xs ys
+--       -- I would expect it to work just like above but...
+--       -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+--       --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       --                                         ^^ Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1
+--       -- s4 is the rank 2 type variable so this sorta makes sense
 
-      -- Maybe unwrap and wrap like before?
-      distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
-                         (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- Maybe unwrap and wrap like before?
+--     --   distOut = distance (smap_ @1 @a @b @s2 @m (\x -> wrap @b $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) xs)
+--     --                      (smap_ @1 @a @b @s2 @m (\x -> wrap @b $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) ys)
+--     -- • Could not deduce ‘SFunction a inSens1 b s1 1’
+--     --     arising from a use of ‘sfunctionTable3’
+--     -- Maybe I can apply sfunctionTable with inSens of x ???
 
-      -- OLD attempts
 
-      -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
-      --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       distOut = distance (smap_ @1 @a @b @s2 @m (\(x :: a s4) -> wrap @b $ unwrap @b $ sfunctionTable3 @a @s4 @b @(ScaleSens s4 1) @1 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) xs)
+--                          (smap_ @1 @a @b @s2 @m (\(x :: a s4) -> wrap @b $ unwrap @b $ sfunctionTable3 @a @s4 @b @(ScaleSens s4 1) @1 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) ys)
+--     -- • Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1’
+--     --     arising from a use of ‘sfunctionTable3’
+--     -- Hmm that is as I expect so why doesn't it match with the instance I have?
+--     -- Oh I don't have it on the top level. If I try to add it then it will not be rank 2
+--     -- I may need to redesign the type class?
+--     -- Automatically applying all these type params and adding wrap and unwrap might be complicated
+--     -- Also detecting it.
+--     -- Alternatively I could just make the prop specialized?
+--     -- This might mean the user needs to the type params before passing it.
+--     -- That actually might be more clear actually.
 
-      --distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
-      -- distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
-      -- Maybe I can do a wrap and unwrap. Uhh this is hard
-      -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @b) $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
-  in distOut <= distIn
+
+--       -- OLD attempts
+
+--       -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
+--       --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
+
+--       --distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--       -- Maybe I can do a wrap and unwrap. Uhh this is hard
+--       -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @b) $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--   in distOut <= distIn
 
 -- Let me try a non-rank two version
 noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m.
@@ -257,5 +275,6 @@ noRank2SmapProp randomNumber xs ys =
 
 noRank2SmapPropMain :: IO ()
 noRank2SmapPropMain = do
+  -- The user will need to apply these. They can use genProp to make the property automatically.
   quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2
   -- quickCheck $ noRank2SmapProp @(SDouble Disc) @(SDouble Disc) @_ @L2 @Double @Double
