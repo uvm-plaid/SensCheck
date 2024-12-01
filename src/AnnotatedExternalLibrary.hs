@@ -15,7 +15,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (Diff), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens, MaxNat)
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (..), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList, JoinSens, ScaleSens, MaxNat)
 import Utils
 import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
@@ -278,3 +278,33 @@ noRank2SmapPropMain = do
   -- The user will need to apply these. They can use genProp to make the property automatically.
   quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2
   -- quickCheck $ noRank2SmapProp @(SDouble Disc) @(SDouble Disc) @_ @L2 @Double @Double
+
+-- Given that it's hard to make it work well with rank 2 types, and now suspeciting it might be better for the user to specify it before hand.
+-- Also it would be complicated to manage generating type params and typeclass contraints.
+-- I think we should make it work on monomorphic functions.
+
+-- The user writes this making it monomorphic except for any SEnv
+smapSDoubleDiffL2 = smap_ @1 @(SDouble Diff) @(SDouble Diff) @_ @L2
+
+-- sensCheck generates this
+smapSDoubleProp :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
+smapSDoubleProp randomNumber xs ys =
+  let distIn = distance xs ys
+      distOut = distance (smapSDoubleDiffL2 (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDoubleDiffL2 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+  in distOut <= distIn
+
+-- They may also test it for other concrete types
+
+smapSDoubleDiscL2 = smap_ @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
+
+-- TODO missing instances but just to show how it might be used
+-- smapSDoubleDiscProp :: Double -> SList L2 (SDouble Disc) s2 -> SList L2 (SDouble Disc) s2 -> Bool
+-- smapSDoubleDiscProp randomNumber xs ys =
+--   let distIn = distance xs ys
+--       distOut = distance (smapSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+--   in distOut <= distIn
+
+smapMain :: IO ()
+smapMain = do
+  quickCheck $ smapSDoubleProp
+  -- quickCheck $ smapSDoubleDiscProp

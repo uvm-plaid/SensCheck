@@ -233,6 +233,7 @@ main = do
       -- testSmapPropTemp
       -- Correct.smapPropMain
       Correct.noRank2SmapPropMain
+      Correct.smapMain
       -- hof
 --       pass
 --       fail
