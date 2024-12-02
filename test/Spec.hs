@@ -32,7 +32,6 @@ import qualified IncorrectAnnotations as Incorrect
 import qualified SensStaticHMatrix as SensStaticHMatrix
 import StdLib (smap)
 import Data.Kind (Type)
-import StdLib (smap')
 import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
 import Primitives (eq_sym, scale_unit, cong)
@@ -117,109 +116,12 @@ import Primitives (eq_sym, scale_unit, cong)
 --     )
 
 
--- Smap for reference
--- smap' :: forall fn_sens a b s2 m.
---   (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
---   -> SList m a s2
---   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
-
--- TODO What does the manually written property look like?
--- Something like this?
--- smapProp :: forall fn_sens a (b :: SEnv -> Type) s1 s2 m.
---   (Distance (b (ScaleSens s2 fn_sens))) =>
---   (a s1 -> b (ScaleSens s1 fn_sens))
---   -> SList L2 (SDouble Diff) s2
---   -> SList L2 (SDouble Diff) s2
---   -> Bool
--- smapProp f xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap @fn_sens f xs) (smap @fn_sens f ys)
---   in distOut <= distIn
-
-
--- Property of smap on the identity function
--- idSmapProp :: forall a s2 m.
---   SList m a s2
---   -> SList m a s2
---   -> Bool
--- idSmapProp = smapProp @1 sid
-
-
--- Like isSmapProp but with a random showable function using QuickCheck.Function
--- I would expect an id like function here
--- DO I need the inputs?
--- Can I make the 1 a type variable?
--- idkProp :: forall a s m fn_s b. Fun (a s) (b (ScaleSens fn_s 1)) -> SList m a s -> SList m a s -> Bool
--- idkProp (Fun _ f) xs ys =
---   let distIn = distance xs ys
---       distOut = distance (smap @1 f xs) (smap @1 f ys)
---       -- distOut = distance (smap f xs) (smap f ys)
---   in distOut <= distIn
-
-
-smapProp' :: forall fn_sens a b s2 m.
-  (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
-  (forall s1. Fun (a s1) (b (ScaleSens s1 fn_sens)))
-  -> SList m a s2
-  -> SList m a s2
-  -> Bool
-smapProp' f xs ys =
-  let distIn = distance xs ys
-      distOut =
-        distance
-          @(SList m b (ScaleSens s2 (MaxNat fn_sens 1)))
-          (smap @fn_sens @a @b @s2 @m (applyFun f) xs)
-          (smap @fn_sens @a @b @s2 @m (applyFun f) ys)
-  in distOut <= distIn
-
--- Not rank2
-smapProp'' :: forall fn_sens a b s2 m.
-  (Distance (SList m a s2), Distance (SList m b (ScaleSens s2 (MaxNat fn_sens 1)))) =>
-  Fun (a s2) (b (ScaleSens s2 fn_sens))
-  -> SList m a s2
-  -> SList m a s2
-  -> Bool
-smapProp'' f xs ys =
-  let distIn = distance xs ys
-      distOut =
-        distance
-          @(SList m b (ScaleSens s2 (MaxNat fn_sens 1)))
-          (smap' @fn_sens @a @b @s2 @m (applyFun f) xs)
-          (smap' @fn_sens @a @b @s2 @m (applyFun f) ys)
-  in distOut <= distIn
-
-
-
--- testing higher order functions
--- functionCompositionProp :: Eq c => (a -> b) -> (b -> c) -> a -> Bool
--- functionCompositionProp f g x = (g . f) x == g (f x)
-
--- I forgot how to use this
--- See https://stackoverflow.com/questions/52980636/how-to-write-quickcheck-on-properties-of-functions
--- So we do need to make the type variables concrete when we actually test (I think)
--- Otherwise we end up with ambigous type errors. I think that makes sense to me otherwise I'd imagine this is hard.
-
--- This does not work escaped scope
--- testSmap :: forall (fn_sens :: TypeNats.Nat) a b (s1 :: SEnv) m. IO ()
--- testSmap =
---   quickCheck
---     (\(f :: Fun ((SDouble Diff) s1) (SDouble Diff (ScaleSens s1 fn_sens))) (l1 :: SList L2 (SDouble Diff) s1) (l2 :: SList L2 (SDouble Diff) s1) ->
---       smapProp' @fn_sens @(SDouble Diff) @(SDouble Diff) @s1 f l1 l2)
-
--- Non rank 2
-testSmap' :: forall (fn_sens :: TypeNats.Nat) a b (s :: SEnv) m. IO ()
-testSmap' =
-  quickCheck
-    (\(f :: Fun ((SDouble Diff) s) (SDouble Diff (ScaleSens s fn_sens))) (l1 :: SList L2 (SDouble Diff) s) (l2 :: SList L2 (SDouble Diff) s) ->
-      smapProp'' @fn_sens @(SDouble Diff) @(SDouble Diff) @s f l1 l2)
-
 instance CoArbitrary (SDouble Diff s1) where
   coarbitrary = undefined -- TODO
 
 instance Function (SDouble Diff s) where
   function = functionMap (toRational . unSDouble ) (D_UNSAFE . fromRational)
 
-testSmapPropTemp = quickCheck $ withMaxSuccess 100 Correct.smapProp
 
 main :: IO ()
 main = do

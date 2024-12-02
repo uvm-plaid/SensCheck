@@ -18,6 +18,7 @@
    ,RebindableSyntax
    ,EmptyCase
    #-}
+{-# LANGUAGE InstanceSigs #-}
 module Primitives where
 import Prelude hiding (return,(>>=), sum)
 import qualified Prelude as P
@@ -134,13 +135,41 @@ emptySList = SList_UNSAFE []
 scons :: t s1 -> SList m t s2 -> SList m t (s1 +++ s2)
 scons x xs = undefined
 
-sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
+-- To actually implement higher order functions we need to wrap and unwrap types to and from their unsensitive types
+-- These functions like smap and sfoldr are the trusted primatives that can use this typeclass to accomplish this
+-- Solo left the implementations of these functions undefined (or would eventually lead to an undefined in the case of smap)
+-- In this work we actually need these functions to run so we've fixed those functions requiring this typeclass
+-- Only trusted primitives should be able to use this typeclass directly, and those trusted primitives can be tested with SensCheck
+class SPrimitive b where
+  type Unsens b
+  wrap :: forall s. Unsens b -> b s
+  unwrap :: forall s. b s -> Unsens b
+
+-- There is only 1 primative type in Solo
+instance SPrimitive (SDouble m) where
+  type Unsens (SDouble m) = Double
+  wrap :: Double -> SDouble m s
+  wrap = D_UNSAFE
+  unwrap :: SDouble m s -> Double
+  unwrap = unSDouble
+
+-- Previous unworking sfoldr
+sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
            (forall s1p s2p.
             t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
         -> t2 s5
         -> SList cm t1 s4
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
-sfoldr f init xs = undefined
+sfoldr_ f init xs = undefined
+
+-- Working implementation using the SPrimitve typeclass
+sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
+           (forall s1p s2p.
+            t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
+        -> t2 s5 -- Initial Acc
+        -> SList cm t1 s4
+        -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
+sfoldr f init (SList_UNSAFE xs) = wrap @t2 $ unwrap $ foldr (\x acc -> wrap @t2 . unwrap $ f x acc ) init xs
 
 sfoldr' :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 s1p s2p.
            (t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))

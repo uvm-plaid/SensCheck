@@ -122,7 +122,7 @@ solo_double a = D_UNSAFE $ unSDouble a + unSDouble a
 sid :: a s -> a (ScaleSens s 1)
 sid = cong (eq_sym scale_unit)
 
-smapId :: forall m b s2. SList m b s2 -> SList m b s2
+smapId :: forall m b s2. (SPrimitive b) => SList m b s2 -> SList m b s2
 smapId = cong scale_unit . smap @1 sid
 
 -- Example demonstrating a higher order function that is applied
@@ -139,163 +139,18 @@ smapIdDoubles = smapId @L2 @(SDouble Diff)
 -- We have a solution similar to QuickCheck.Function but differs since we do care about relations of intermediate types
 -- The same restriction applies on making types concrete
 
--- smapSDouble :: forall fn_sens s2 m.
---   (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 fn_sens))
---   -> SList m (SDouble Diff) s2
---   -> SList m (SDouble Diff) (ScaleSens s2 (MaxNat fn_sens 1))
--- smapSDouble = smap' @fn_sens @(SDouble Diff) @(SDouble Diff) @s2 @L2
-
-smapSDouble :: (forall (s1 :: SEnv).  SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
-smapSDouble = smap @1 @(SDouble Diff) @(SDouble Diff)
-
-smap'SDouble :: (SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
-smap'SDouble = smap' @1 @(SDouble Diff) @(SDouble Diff)
-
--- smap'SDoubleFunction :: forall m s2. SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
--- smap'SDoubleFunction = smap'SDouble $ sfunctionTable (Proxy @s2)
-
--- Get this to work
-smap2'SDouble :: (SDouble Diff s2 -> SDouble Diff (ScaleSens s2 1)) -> SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
-smap2'SDouble = smap2' @1 @(SDouble Diff) @(SDouble Diff)
-
--- How it might be appllied
--- Looks like I will need to catpure the scalar and apply it for Proxy
-smap'SDoubleFunction :: forall s2. SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) (ScaleSens s2 1)
-smap'SDoubleFunction = smap2'SDouble $ sfunctionTable (Proxy @1)
-
--- manually written property
-smap'SDoubleProp :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
-smap'SDoubleProp xs ys =
-  let distIn = distance xs ys
-      distOut = distance (smap'SDouble (sfunctionTable (Proxy @1)) xs) (smap'SDouble (sfunctionTable (Proxy @1)) ys)
-  in distOut <= distIn
-
--- How the actual smap might be applied
-smapPropFunction :: SList m (SDouble Diff) s2 -> SList m (SDouble Diff) (ScaleSens s2 1)
-smapPropFunction = smapSDouble (sfunctionTable (Proxy @1))
-
--- manually written property
-smapProp :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
-smapProp xs ys =
-  let distIn = distance xs ys
-      distOut = distance (smapSDouble (sfunctionTable (Proxy @1)) xs) (smapSDouble (sfunctionTable (Proxy @1)) ys)
-  in distOut <= distIn
-
--- What would a version with the Gen monad look like with generation
--- We may need to return Gen Bool?
--- smapProp'' :: SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Gen Bool
--- smapProp'' xs ys = do
--- -- This does not type check
---   f <- sfunctionTable2 (Proxy @1)
---   let distIn = distance xs ys
---       distOut = distance (smapSDouble f xs) (smapSDouble f ys)
---   return $ distOut <= distIn
-
--- Take the function as input instead not too disimilar to how Test.QuickCheck.Function works
-smapProp' :: (forall s1. SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
-smapProp' f xs ys =
-  let distIn = distance xs ys
-      distOut = distance (smapSDouble f xs) (smapSDouble f ys)
-  in distOut <= distIn
-
--- Call quickcheck on smapProp' first using Gen to generate the function
--- testSmapProp = forAll (sfunctionTable2 (Proxy @1)) $ \f -> smapProp' f
-
--- Gets inferred as
--- f :: SDouble 'Diff Any -> SDouble 'Diff (ScaleSens Any 1)
--- What if I add more type hints
--- testSmapProp' = forAll (sfunctionTable2 (Proxy @1)) $ \(f :: forall s1. SDouble 'Diff s1 -> SDouble 'Diff (ScaleSens s1 1)) -> smapProp' f
-
--- Ok that's sad but I could maybe generate a random number (via quickcheck) and pass it in
--- This does work
-smapProp'' :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
-smapProp'' randomNumber xs ys =
-  let distIn = distance xs ys
-      distOut = distance (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDouble_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
-  in distOut <= distIn
-
--- TODO now write a test for smap_ similar to the above
--- THat should test a 1 sensitive function
--- smapProp1''' :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m s1.
---   (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s1 b (ScaleSens s1 1) 1, SFunction a s2 b (ScaleSens s2 1) 1) =>
---   Double -> SList m a s2 -> SList m a s2 -> Bool
--- smapProp1''' randomNumber xs ys =
---   let distIn = distance xs ys
---       -- I would expect it to work just like above but...
---       -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
---       --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       --                                         ^^ Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1
---       -- s4 is the rank 2 type variable so this sorta makes sense
-
---       -- Maybe unwrap and wrap like before?
---     --   distOut = distance (smap_ @1 @a @b @s2 @m (\x -> wrap @b $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) xs)
---     --                      (smap_ @1 @a @b @s2 @m (\x -> wrap @b $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) ys)
---     -- • Could not deduce ‘SFunction a inSens1 b s1 1’
---     --     arising from a use of ‘sfunctionTable3’
---     -- Maybe I can apply sfunctionTable with inSens of x ???
-
-
---       distOut = distance (smap_ @1 @a @b @s2 @m (\(x :: a s4) -> wrap @b $ unwrap @b $ sfunctionTable3 @a @s4 @b @(ScaleSens s4 1) @1 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) xs)
---                          (smap_ @1 @a @b @s2 @m (\(x :: a s4) -> wrap @b $ unwrap @b $ sfunctionTable3 @a @s4 @b @(ScaleSens s4 1) @1 (Proxy @1) randomNumber (wrap @a $ unwrap @a $ x)) ys)
---     -- • Could not deduce ‘SFunction a s4 b (ScaleSens s4 1) 1’
---     --     arising from a use of ‘sfunctionTable3’
---     -- Hmm that is as I expect so why doesn't it match with the instance I have?
---     -- Oh I don't have it on the top level. If I try to add it then it will not be rank 2
---     -- I may need to redesign the type class?
---     -- Automatically applying all these type params and adding wrap and unwrap might be complicated
---     -- Also detecting it.
---     -- Alternatively I could just make the prop specialized?
---     -- This might mean the user needs to the type params before passing it.
---     -- That actually might be more clear actually.
-
-
---       -- OLD attempts
-
---       -- distOut = distance (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
---       --                    (smap_ @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
-
---       --distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       -- distOut = distance (smap_ @1 @a @b @_ @_ (sfunctionTable3 (Proxy @1) randomNumber) xs) (smap_ @1 (sfunctionTable3 (Proxy @1) randomNumber) ys)
---       -- Maybe I can do a wrap and unwrap. Uhh this is hard
---       -- distOut = distance (smap_ (\(x :: a s5) -> (wrap @b) $ unwrap @b $ sfunctionTable3 (Proxy @1) randomNumber (wrap @a $ unwrap @a x)) xs) undefined -- (smap_ (sfunctionTable3 (Proxy @1) randomNumber) ys)
---   in distOut <= distIn
-
--- Let me try a non-rank two version
-noRank2SmapProp :: forall (a :: SEnv -> Type) (b :: SEnv -> Type) s2 m.
-  (SPrimitive a, SPrimitive b, Distance (SList m a s2), Distance (SList m b (ScaleSens s2 1)), SFunction a s2 b (ScaleSens s2 1) 1) =>
-  Double -> SList m a s2 -> SList m a s2 -> Bool
-noRank2SmapProp randomNumber xs ys =
-  let distIn = distance xs ys
-      distOut = distance (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) xs)
-                         (smap_NoRank2 @1 @a @b @s2 @m (sfunctionTable3 (Proxy @1) randomNumber) ys)
-  in distOut <= distIn
-
--- smapPropMain :: IO ()
--- smapPropMain = quickCheck $ smapProp''' @1 @SDouble @SDouble
-
-noRank2SmapPropMain :: IO ()
-noRank2SmapPropMain = do
-  -- The user will need to apply these. They can use genProp to make the property automatically.
-  quickCheck $ noRank2SmapProp @(SDouble Diff) @(SDouble Diff) @_ @L2
-  -- quickCheck $ noRank2SmapProp @(SDouble Disc) @(SDouble Disc) @_ @L2 @Double @Double
-
--- Given that it's hard to make it work well with rank 2 types, and now suspeciting it might be better for the user to specify it before hand.
--- Also it would be complicated to manage generating type params and typeclass contraints.
--- I think we should make it work on monomorphic functions.
-
 -- The user writes this making it monomorphic except for any SEnv
-smapSDoubleDiffL2 = smap_ @1 @(SDouble Diff) @(SDouble Diff) @_ @L2
+smapSDoubleDiffL2 = smap @1 @(SDouble Diff) @(SDouble Diff) @_ @L2
 
 -- sensCheck generates this
 smapSDoubleProp :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff) s2 -> Bool
 smapSDoubleProp randomNumber xs ys =
   let distIn = distance xs ys
-      distOut = distance (smapSDoubleDiffL2 (sfunctionTable3 (Proxy @1) randomNumber) xs) (smapSDoubleDiffL2 (sfunctionTable3 (Proxy @1) randomNumber) ys)
+      distOut = distance (smapSDoubleDiffL2 (sfunctionTable (Proxy @1) randomNumber) xs) (smapSDoubleDiffL2 (sfunctionTable (Proxy @1) randomNumber) ys)
   in distOut <= distIn
 
 -- They may also test it for other concrete types
-
-smapSDoubleDiscL2 = smap_ @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
+smapSDoubleDiscL2 = smap @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
 
 -- TODO missing instances but just to show how it might be used
 -- smapSDoubleDiscProp :: Double -> SList L2 (SDouble Disc) s2 -> SList L2 (SDouble Disc) s2 -> Bool
@@ -313,29 +168,29 @@ smapMain = do
 sfoldrSDoubleDiffL2 = sfoldr_ @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
 sfoldrSDoubleDiscL2 = sfoldr_ @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
 
--- Need to consider multi argument functions
+-- Need to consider multi argument functions TODO fix this after
             -- t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
 -- sfoldrSDoubleDiscProp :: forall s1 s2 s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
-sfoldrSDoubleDiscProp randomNumber xs ys init =
-  let distIn = undefined -- distance xs xs
-      -- f = Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber)
-      -- distOut = distance (sfoldrSDoubleDiscL2 init (Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber))) undefined
-      -- f :: SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
-      -- f = sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs
-      -- f :: SDouble 'Disc s5
-      -- -> SList 'L2 (SDouble 'Disc) s4
-      -- -> SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
-      -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1) = sfoldrSDoubleDiscL2 ((sfunctionTable3 (Proxy @1) randomNumber) . (sfunctionTable3 (Proxy @1) randomNumber))
-      -- f = sfoldrSDoubleDiffL2 (\(x :: SDouble Diff s10) -> (sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber) $ (sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber) x) init xs
-      -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)
-      -- f (x :: SDouble Diff s10) = sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber $ sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber x
+-- sfoldrSDoubleDiscProp randomNumber xs ys init =
+--   let distIn = undefined -- distance xs xs
+--       -- f = Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber)
+--       -- distOut = distance (sfoldrSDoubleDiscL2 init (Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber))) undefined
+--       -- f :: SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
+--       -- f = sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs
+--       -- f :: SDouble 'Disc s5
+--       -- -> SList 'L2 (SDouble 'Disc) s4
+--       -- -> SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
+--       -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1) = sfoldrSDoubleDiscL2 ((sfunctionTable3 (Proxy @1) randomNumber) . (sfunctionTable3 (Proxy @1) randomNumber))
+--       -- f = sfoldrSDoubleDiffL2 (\(x :: SDouble Diff s10) -> (sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber) $ (sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber) x) init xs
+--       -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)
+--       -- f (x :: SDouble Diff s10) = sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber $ sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber x
 
 
-      -- distOut = distance (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs)
-      --                    (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init ys)
+--         -- distOut = distance (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs)
+--         --                    (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init ys)
 
-      -- This is too hard just make a SFunction2 typeclass
-      distOut = distance (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) @_ @(SDouble Diff) (Proxy @1) randomNumber) init xs)
-                         (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) (Proxy @1) randomNumber) init ys)
-  in undefined -- distOut <= distIn
--- instance SFunction (SDouble Diff) (ScaleSens s1 1) ((->) (SDouble Diff s2)) (SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)) 1 where
+--       -- This is too hard just make a SFunction2 typeclass
+--       distOut = distance (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) @_ @(SDouble Diff) (Proxy @1) randomNumber) init xs)
+--                          (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) (Proxy @1) randomNumber) init ys)
+--   in undefined -- distOut <= distIn
+-- -- instance SFunction (SDouble Diff) (ScaleSens s1 1) ((->) (SDouble Diff s2)) (SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)) 1 where
