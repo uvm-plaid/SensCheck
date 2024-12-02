@@ -74,6 +74,20 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
             -- scaleUpTo = chooseInteger (0, scalar)
         in D_UNSAFE $ unSDouble d * fromInteger scalar
 
+  -- TODO make an instance for this
+    -- • No instance for ‘SFunction
+    --                      a0
+    --                      inSens0
+    --                      ((->) (SDouble Diff s2p))
+    --                      (SDouble Diff (ScaleSens s1p 1 +++ ScaleSens s2p 1))
+    --                      1’
+    --     arising from a use of ‘sfunctionTable3’
+    -- • In the first argument of ‘($)’, namely
+
+-- instance SFunction a inSens ((->) (b s2)) (inSens +++ )
+
+-- instance SFunction (SDouble Diff) (ScaleSens s1 1) ((->) (SDouble Diff s2)) (SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)) 1 where
+
 -- Want to take a (s1 +++ s2) eventually
 -- instance (s2 ~ s1 +++ s1) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 where
 -- sfunctionTable d = undefined
@@ -94,6 +108,8 @@ type family Curry (ab :: (SEnv -> Type, SEnv -> Type)) :: (SEnv, SEnv) -> Type w
 instance (s3 ~ s1 +++ s2, ab ~ Curry '(SDouble Diff, SDouble Diff)) => SFunction ab '(s1, s2) (SDouble Diff) s3 () where
   -- TODO probably not right
   sfunctionTable p (Pair a b) = D_UNSAFE $ unSDouble a + unSDouble b
+
+
 
 -- Test Smap instantating the types
 -- testSmap :: forall (s1 :: SEnv) (s2 :: SEnv). SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Diff)  (ScaleSens s2 1) -- (ScaleSens s2 (MaxNat 1 1))

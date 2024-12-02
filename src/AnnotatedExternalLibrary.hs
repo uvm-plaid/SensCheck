@@ -306,5 +306,36 @@ smapSDoubleDiscL2 = smap_ @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
 
 smapMain :: IO ()
 smapMain = do
-  quickCheck $ smapSDoubleProp
+  quickCheck smapSDoubleProp
   -- quickCheck $ smapSDoubleDiscProp
+
+-- sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
+sfoldrSDoubleDiffL2 = sfoldr_ @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
+sfoldrSDoubleDiscL2 = sfoldr_ @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
+
+-- Need to consider multi argument functions
+            -- t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
+-- sfoldrSDoubleDiscProp :: forall s1 s2 s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
+sfoldrSDoubleDiscProp randomNumber xs ys init =
+  let distIn = undefined -- distance xs xs
+      -- f = Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber)
+      -- distOut = distance (sfoldrSDoubleDiscL2 init (Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber))) undefined
+      -- f :: SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
+      -- f = sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs
+      -- f :: SDouble 'Disc s5
+      -- -> SList 'L2 (SDouble 'Disc) s4
+      -- -> SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
+      -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1) = sfoldrSDoubleDiscL2 ((sfunctionTable3 (Proxy @1) randomNumber) . (sfunctionTable3 (Proxy @1) randomNumber))
+      -- f = sfoldrSDoubleDiffL2 (\(x :: SDouble Diff s10) -> (sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber) $ (sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber) x) init xs
+      -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)
+      -- f (x :: SDouble Diff s10) = sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber $ sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber x
+
+
+      -- distOut = distance (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs)
+      --                    (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init ys)
+
+      -- This is too hard just make a SFunction2 typeclass
+      distOut = distance (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) @_ @(SDouble Diff) (Proxy @1) randomNumber) init xs)
+                         (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) (Proxy @1) randomNumber) init ys)
+  in undefined -- distOut <= distIn
+-- instance SFunction (SDouble Diff) (ScaleSens s1 1) ((->) (SDouble Diff s2)) (SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)) 1 where
