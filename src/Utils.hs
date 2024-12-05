@@ -3,9 +3,12 @@
 module Utils where
 
 import Data.Matrix qualified as Matrix
-import Sensitivity (DPSMatrix (unDPSMatrix), SDouble (unSDouble), SMatrix (unSMatrix))
+import Sensitivity (DPSMatrix (unDPSMatrix), SDouble (unSDouble), SMatrix (unSMatrix), SList (..))
 import GHC.TypeLits.Singletons
 import GHC.TypeNats ( withSomeSNat )
+import Test.QuickCheck (Arbitrary)
+import Test.QuickCheck.Arbitrary (Arbitrary(..))
+import Control.Monad (replicateM)
 
 -- General utilty functions that might be used by generated code
 
@@ -25,3 +28,14 @@ withKnownNat2 f n1 n2 = withSomeSNat n1 $ \(SNat :: SNat n1) ->
     withSomeSNat n2 $ \(SNat :: SNat n2) ->
       f @n1 @n2
 
+-- Useful for generating lists of the same size with quickcheck
+data SameSizedSLists m t senv = SameSizedSLists (SList m t senv) (SList m t senv) deriving (Show)
+
+-- Have quickcheck generate lists of the same size
+
+instance (Arbitrary (t senv)) => Arbitrary (SameSizedSLists m t senv) where
+  arbitrary = do
+    size <- arbitrary
+    l1 <- replicateM size arbitrary
+    l2 <- replicateM size arbitrary
+    pure $ SameSizedSLists (SList_UNSAFE l1) (SList_UNSAFE l2)

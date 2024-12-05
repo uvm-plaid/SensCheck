@@ -20,7 +20,6 @@
    #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module StdLib where
 
@@ -80,8 +79,6 @@ count xs = cong scale_unit $ sfoldr_ @1 @1 count_fn (sConstD @'[] 0) xs
   where count_fn :: forall (s1 :: SEnv) s2 t.
           t s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)
         count_fn x a = (cong (eq_sym scale_unit) $ sConstD @s1 1) <+> (cong (eq_sym scale_unit) a)
-
-
 
 -- add the elements of a pair
 pairPlus :: L1Pair (SDouble Diff) (SDouble Diff) s -> SDouble Diff (ScaleSens s 1)

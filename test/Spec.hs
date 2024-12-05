@@ -17,7 +17,7 @@ import Control.Monad
 import Control.Monad.Random
 import Debug.Trace qualified as Debug
 import Distance
-import DpMinst (SGradients (..), flattenGrads, randomMnist, SameSizedSLists (SameSizedSLists))
+import DpMinst (SGradients (..), flattenGrads, randomMnist)
 import DpMinst qualified
 import GHC.TypeLits (KnownNat)
 import Sensitivity
@@ -134,8 +134,8 @@ main = do
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
       -- testSmapPropTemp
       -- Correct.smapPropMain
-      Correct.noRank2SmapPropMain
       Correct.smapMain
+      Correct.sfoldrMain
       -- hof
 --       pass
 --       fail

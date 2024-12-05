@@ -1,7 +1,6 @@
 {- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
@@ -21,7 +20,7 @@ import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
 import Primitives
 import StdLib
-import Test.QuickCheck (Gen, quickCheck, forAll)
+import Test.QuickCheck (Gen, quickCheck, forAll, again)
 import SFunction
 import GHC.Base (Type)
 
@@ -165,32 +164,26 @@ smapMain = do
   -- quickCheck $ smapSDoubleDiscProp
 
 -- sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
-sfoldrSDoubleDiffL2 = sfoldr_ @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
-sfoldrSDoubleDiscL2 = sfoldr_ @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
+sfoldrSDoubleDiffL2 = sfoldr @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
+sfoldrSDoubleDiscL2 = sfoldr @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
 
--- Need to consider multi argument functions TODO fix this after
-            -- t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
--- sfoldrSDoubleDiscProp :: forall s1 s2 s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
--- sfoldrSDoubleDiscProp randomNumber xs ys init =
---   let distIn = undefined -- distance xs xs
---       -- f = Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber)
---       -- distOut = distance (sfoldrSDoubleDiscL2 init (Pair (sfunctionTable3 (Proxy @1) randomNumber) (sfunctionTable3 (Proxy @1) randomNumber))) undefined
---       -- f :: SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
---       -- f = sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs
---       -- f :: SDouble 'Disc s5
---       -- -> SList 'L2 (SDouble 'Disc) s4
---       -- -> SDouble 'Disc (ScaleSens s4 1 +++ TruncateInf s5)
---       -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1) = sfoldrSDoubleDiscL2 ((sfunctionTable3 (Proxy @1) randomNumber) . (sfunctionTable3 (Proxy @1) randomNumber))
---       -- f = sfoldrSDoubleDiffL2 (\(x :: SDouble Diff s10) -> (sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber) $ (sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber) x) init xs
---       -- f :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)
---       -- f (x :: SDouble Diff s10) = sfunctionTable3 @(SDouble Diff) (Proxy @1) randomNumber $ sfunctionTable3 @(SDouble Diff) @s10 (Proxy @1) randomNumber x
+sfoldrSDoubleDiscProp :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
+sfoldrSDoubleDiscProp randomNumber xs ys init =
+  let distIn = distance xs xs
+      distOut = distance (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs) (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys)
+  in distOut <= distIn
 
+sfoldrSDoubleDiffL2HighSens = sfoldr @2 @2 @(SDouble Diff) @(SDouble Diff) @L2
 
---         -- distOut = distance (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init xs)
---         --                    (sfoldrSDoubleDiscL2 (sfunctionTable3 (Proxy @1) randomNumber . (sfunctionTable3 (Proxy @1) randomNumber)) init ys)
+sfoldrSDoubleDiscPropHighSens :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
+sfoldrSDoubleDiscPropHighSens randomNumber xs ys init =
+  let distIn = distance xs xs
+      distOut = distance (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs) (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys)
+  in distOut <= distIn
 
---       -- This is too hard just make a SFunction2 typeclass
---       distOut = distance (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) @_ @(SDouble Diff) (Proxy @1) randomNumber) init xs)
---                          (sfoldrSDoubleDiffL2 (curry $ sfunctionTable3 @(Curry '(SDouble Diff, SDouble Diff)) (Proxy @1) randomNumber) init ys)
---   in undefined -- distOut <= distIn
--- -- instance SFunction (SDouble Diff) (ScaleSens s1 1) ((->) (SDouble Diff s2)) (SDouble Diff (ScaleSens s1 1 +++ ScaleSens s2 1)) 1 where
+sfoldrMain :: IO ()
+sfoldrMain = do
+  putStrLn "Testing sfoldr"
+  quickCheck (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiscProp random l1 l2)
+  putStrLn "Testing 2-sens sfoldr"
+  quickCheck (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiscPropHighSens random l1 l2)

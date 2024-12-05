@@ -62,3 +62,19 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
            scaleFactor = random `mod'` fromIntegral scalar
        in D_UNSAFE $ unSDouble d * scaleFactor
 
+-- This does not work
+instance (SFunction a inSens b bSens p, SFunction b bSens c outputSens p) => SFunction a inSens c outputSens (p, b bSens) where
+  sfunctionTable p random a = let (b :: b bSens) = sfunctionTable (Proxy @p) random a in sfunctionTable (Proxy @p) random b
+
+-- Two argument functions
+class SFunction2 a aInSens b bInSens c outputSens p1 p2 where
+    sfunctionTable2 :: Proxy p1 -> Proxy p2 -> Double -> a aInSens -> b bInSens -> c outputSens
+
+instance (s3 ~ ScaleSens s1 scalar1 +++ ScaleSens s2 scalar2, TL.KnownNat scalar1, TL.KnownNat scalar2) => SFunction2 (SDouble Diff) s1 (SDouble Diff) s2 (SDouble Diff) s3 scalar1 scalar2 where
+  sfunctionTable2 p1 p2 random d1 d2 =
+       let scalar1 = TL.natVal p1
+           scalar2 = TL.natVal p2
+           scaleFactor1 = random `mod'` fromIntegral scalar1
+           scaleFactor2 = random `mod'` fromIntegral scalar2
+       in D_UNSAFE $ unSDouble d1 * scaleFactor1 + unSDouble d2 * scaleFactor2
+

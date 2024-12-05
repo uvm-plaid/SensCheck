@@ -338,16 +338,6 @@ parseMNIST = do
 --     putStrLn $ "Iteration " ++ show i ++ ": " ++ show (length (filter ((==) <$> fst <*> snd) res')) ++ " of " ++ show (length res')
 --     return trained'
 
--- Useful for generating lists of the same size with quickcheck
-data SameSizedSLists m t senv = SameSizedSLists (Solo.SList m t senv) (Solo.SList m t senv) deriving (Show)
-
--- Have quickcheck generate lists of the same size
-
-instance (Arbitrary (t senv)) => Arbitrary (SameSizedSLists m t senv) where
-  arbitrary = do
-    l1 <- replicateM 1 arbitrary
-    l2 <- replicateM 1 arbitrary
-    pure $ SameSizedSLists (SList_UNSAFE l1) (SList_UNSAFE l2)
 
 -- Some unused code that was useful for testing
 
