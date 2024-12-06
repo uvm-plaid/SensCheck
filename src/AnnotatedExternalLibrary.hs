@@ -167,19 +167,30 @@ smapMain = do
 sfoldrSDoubleDiffL2 = sfoldr @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
 sfoldrSDoubleDiscL2 = sfoldr @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
 
+-- What should the property be? for sfoldr @1 @1 (generatedFunction)
+-- s4 * (MaxNat 1 1) +++ TruncateInf s5
+-- s4 * 1 +++ TruncateInf s5
+-- s4 + TruncateInf s5
+-- s4 + s5 Not infinity
+-- The distance for s5 shouldn't be considered since we use the same acc?
+-- Thereforward we shoud use an unscaled distance
 sfoldrSDoubleDiscProp :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
 sfoldrSDoubleDiscProp randomNumber xs ys init =
-  let distIn = distance xs xs
+  let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs) (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys)
-  in distOut <= distIn
+  in distOut <= distIn + 0.00000001
 
 sfoldrSDoubleDiffL2HighSens = sfoldr @2 @2 @(SDouble Diff) @(SDouble Diff) @L2
 
+-- What should the property be? for sfoldr @2 @2 (generatedFunction)
+-- s4 * (MaxNat 2 2) +++ TruncateInf s5
+-- s4 * 2
+-- The distance of the output should be twice the distance of the input
 sfoldrSDoubleDiscPropHighSens :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
 sfoldrSDoubleDiscPropHighSens randomNumber xs ys init =
-  let distIn = distance xs xs
+  let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs) (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys)
-  in distOut <= distIn
+  in distOut <= 2 * distIn + 0.00000001
 
 sfoldrMain :: IO ()
 sfoldrMain = do

@@ -171,6 +171,20 @@ sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitiv
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
 sfoldr f init (SList_UNSAFE xs) = wrap @t2 $ unwrap $ foldr (\x acc -> wrap @t2 . unwrap $ f x acc ) init xs
 
+-- What should the property be? for sfoldr @1 @1 (generatedFunction)
+-- s4 * (MaxNat 1 1) +++ TruncateInf s5
+-- s4 * 1 +++ TruncateInf s5
+-- s4 + TruncateInf s5
+-- s4 + s5 Not infinity
+-- The distance for s5 shouldn't be considered since we use the same acc?
+-- Thereforward we shoud use an unscaled distance
+
+-- What should the property be? for sfoldr @2 @2 (generatedFunction)
+-- s4 * (MaxNat 2 2) +++ TruncateInf s5
+-- s4 * 2
+-- The distance of the output should be twice the distance of the input
+
+
 sfoldr' :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 s1p s2p.
            (t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
         -> t2 s5
