@@ -162,7 +162,8 @@ sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
 sfoldr_ f init xs = undefined
 
--- Working implementation using the SPrimitve typeclass
+-- A running implementation using the SPrimitve typeclass
+-- However after using SensCheck this is actually incorrect for anything more than 1 sensitive and L1 sensitivity
 sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
            (forall s1p s2p.
             t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
@@ -170,20 +171,6 @@ sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitiv
         -> SList cm t1 s4
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
 sfoldr f init (SList_UNSAFE xs) = wrap @t2 $ unwrap $ foldr (\x acc -> wrap @t2 . unwrap $ f x acc ) init xs
-
--- What should the property be? for sfoldr @1 @1 (generatedFunction)
--- s4 * (MaxNat 1 1) +++ TruncateInf s5
--- s4 * 1 +++ TruncateInf s5
--- s4 + TruncateInf s5
--- s4 + s5 Not infinity
--- The distance for s5 shouldn't be considered since we use the same acc?
--- Thereforward we shoud use an unscaled distance
-
--- What should the property be? for sfoldr @2 @2 (generatedFunction)
--- s4 * (MaxNat 2 2) +++ TruncateInf s5
--- s4 * 2
--- The distance of the output should be twice the distance of the input
-
 
 sfoldr' :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 s1p s2p.
            (t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))

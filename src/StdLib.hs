@@ -69,6 +69,7 @@ smap_NoRank2 :: forall fn_sens a b s2 m . (SPrimitive a, SPrimitive b) =>
 
 smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @b) . unwrap . f <$> l
 
+-- TODO test this
 sfilter :: (forall s. Double -> Bool)
   -> L1List (SDouble m) s1
   -> L1List (SDouble m) s1
