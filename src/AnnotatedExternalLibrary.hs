@@ -14,7 +14,7 @@ import Control.Monad (replicateM)
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (..), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList (unSList), JoinSens, ScaleSens, MaxNat)
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (..), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList (unSList), JoinSens, ScaleSens, MaxNat, TruncateInf)
 import Utils
 import qualified GHC.TypeLits as TL
 import Data.Data (Proxy (..))
@@ -177,8 +177,8 @@ sfoldrSDoubleDiscL2 = sfoldr @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
 -- s4 + s5 Not infinity
 -- The distance for s5 shouldn't be considered since we use the same acc?
 -- Thereforward we shoud use an unscaled distance
-sfoldrSDoubleDiffProp :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
-sfoldrSDoubleDiffProp randomNumber xs ys init =
+sfoldrSDoubleDiffL2Prop :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
+sfoldrSDoubleDiffL2Prop randomNumber xs ys init =
   let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs) (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys)
   in distOut <= distIn + 0.00000001
@@ -191,40 +191,13 @@ sfoldrSDoubleDiffL2HighSens = sfoldr @2 @2 @(SDouble Diff) @(SDouble Diff) @L2
 -- The distance of the output should be twice the distance of the input
 sfoldrSDoubleDiscPropHighSens :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
 sfoldrSDoubleDiscPropHighSens randomNumber xs ys init =
-
   let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs) (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys)
   in distOut <= 2 * distIn + 0.00000001
 
--- The above with Debug.trace to debug only if failure
--- Show distances, and inputs, outputs in different lines
-sfoldrSDoubleDiscPropHighSensDebug :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 -> SList L2 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
-sfoldrSDoubleDiscPropHighSensDebug randomNumber xs ys init =
-  let distIn = distance xs ys
-      output1 = sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs
-      output2 = sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys
-      distOut = distance (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs) (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys)
-      result = distOut <= 2 * distIn + 0.00000001
-  -- in if result then result else Debug.trace ("\n2-Sens sfoldr Failed\ndistIn: " ++ show distIn ++ "\n" ++ "distOut: " ++ show distOut ++ "\n" ++ "xs: " ++ show xs ++ "\n" ++ "ys: " ++ show ys ++ "\n" ++ "init: " ++ show init) result
-  -- Include outputs
-  in if result then result else Debug.trace ("\n\n2-Sens sfoldr Failed\ndistIn: " ++ show distIn ++ "\n" ++ "distOut: " ++ show distOut ++ "\n" ++ "xs: " ++ show (unSDouble <$> unSList xs) ++ "\n" ++ "ys: " ++ show (unSDouble <$> unSList ys)++ "\n" ++ "init: " ++ show init ++ "\n" ++ "output1: " ++ show output1 ++ "\n" ++ "output2: " ++ show output2) result
-
-
-sfoldrSDoubleDiffPropDebug :: forall s4 s5. Double -> SList L1 (SDouble Diff) s4 -> SList L1 (SDouble Diff) s4 -> SDouble Diff s5 -> Bool
-sfoldrSDoubleDiffPropDebug randomNumber xs ys init =
-  let distIn = distance xs ys
-      output1 = sfoldrSDoubleDiffL1 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs
-      output2 = sfoldrSDoubleDiffL1 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys
-      distOut = distance (sfoldrSDoubleDiffL1 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs) (sfoldrSDoubleDiffL1 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys)
-      result = distOut <= distIn + 0.00000001
-  -- in if result then result else Debug.trace ("\n1-Sens sfoldr Failed\ndistIn: " ++ show distIn ++ "\n" ++ "distOut: " ++ show distOut ++ "\n" ++ "xs: " ++ show xs ++ "\n" ++ "ys: " ++ show ys ++ "\n" ++ "init: " ++ show init) result
-  -- Include outputs
-  in if result then result else Debug.trace ("\n\n1-Sens sfoldr Failed\ndistIn: " ++ show distIn ++ "\n" ++ "distOut: " ++ show distOut ++ "\n" ++ "xs: " ++ show (unSDouble <$> unSList xs) ++ "\n" ++ "ys: " ++ show (unSDouble <$> unSList ys) ++ "\n" ++ "init: " ++ show init ++ "\n" ++ "output1: " ++ show output1 ++ "\n" ++ "output2: " ++ show output2) result
-
-
 sfoldrMain :: IO ()
 sfoldrMain = do
   putStrLn "Testing sfoldr"
-  quickCheck $ withMaxSuccess 1000 (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiffPropDebug random l1 l2)
-  -- putStrLn "Testing 2-sens sfoldr"
-  -- quickCheck (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiscPropHighSensDebug random l1 l2)
+  quickCheck $ withMaxSuccess 1000 (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiffL2Prop random l1 l2)
+  putStrLn "Testing 2-sens sfoldr"
+  quickCheck (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiscPropHighSens random l1 l2)

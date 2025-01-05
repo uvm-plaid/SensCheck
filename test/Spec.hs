@@ -11,6 +11,8 @@
 {-# LANGUAGE InstanceSigs #-}
 
 {-# OPTIONS_GHC -ddump-splices #-}
+ -- Outputs to something like .stack-work/dist/x86_64-linux/ghc-9.6.6/build/SensCheck-test/SensCheck-test-tmp/test/Spec.thr.dump-splices
+{-# OPTIONS_GHC -ddump-to-file #-}
 
 import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_mixed_types_mult, solo_plus, solo_plus_incorrect)
 import Control.Monad
@@ -36,11 +38,19 @@ import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
 import Primitives (eq_sym, scale_unit, cong)
 
--- $( sensCheck
+-- $( sensProperty
 --     "hof"
 --     [
 --       -- 'Correct.smap'SDoubleFunction
---       'Correct.smap2'SDouble
+--       'Correct.sfoldrSDoubleDiffL1
+--     ]
+--  )
+
+$( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL1)
+
+-- $( sensCheck
+--     "wrongHof"
+--     ['Correct.sfoldrSDoubleDiffL2
 --     ]
 --  )
 

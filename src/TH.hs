@@ -18,7 +18,6 @@ import Data.Set (Set (..))
 import Data.Maybe (catMaybes)
 import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
-import Debug.Trace (trace)
 import Debug.Trace qualified as Debug
 import Distance qualified
 import GHC.Num qualified
@@ -37,6 +36,15 @@ import Sensitivity (
 import Data.Foldable (fold)
 import Sensitivity qualified
 
+-- TODO remove Debug.traces when complete
+debug = True
+
+trace :: String -> a -> a
+trace = if debug then Debug.trace else \_ a -> a
+
+traceM :: Monad m => String -> m ()
+traceM = if debug then Debug.traceM else \_ -> pure ()
+
 -- Enable verbose logging
 verbose :: Bool
 verbose = True
@@ -47,11 +55,11 @@ padding = 0.00000001
 
 data SensitiveAST
   = SEnv_ Name -- Terminal Sensitivity Environment
-  | TyLit_ TyLit -- Terminal Type Literal (e.g. dependently typed 1)
+  | TyLit_ Integer -- Terminal Type Literal (e.g. dependently typed 1)
   | Plus' SensitiveAST SensitiveAST -- +++
-  | ScaleSens' SensitiveAST SensitiveAST -- n * senv
   | JoinSens' SensitiveAST SensitiveAST -- Max(s1, s2)
-  | TruncateSens'
+  | ScaleSens' SensitiveAST Integer-- n * senv
+  | TruncateSens' SensitiveAST -- Truncate Sensitivity
   | SFun SensitiveAST SensitiveAST -- Function
   deriving (Show, Eq, Ord)
 
@@ -121,7 +129,7 @@ genProp' parseSensitiveAST functionName = do
         "Warning: The following types were not parsed as sensitive types. "
           <> "Please verify they are not sensitive types."
     liftIO $ putStrLn $ "Function: " <> show functionName <> "\n"
-    liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Type(s):\n" <> pprint unparsedTypes <> "\n-----"
+    liftIO $ putStrLn $ show (length unparsedTypes) <> " Unparsed Type(s):\n" <> pprint unparsedTypes <> "\nDone Unparsed Types\n-----"
 
   liftIO $ putStr $ show typeAsts
   inputTypeAsts <- maybe (fail noTypeAstsError) pure $ initMay typeAsts -- The input types of the function in AST form
@@ -187,38 +195,79 @@ Then they may implement their own SensitiveAST parser.
 -}
 defaultParseSensitiveASTs :: ParseSensitiveAST
 defaultParseSensitiveASTs typeParams typ = do
-  innerAST <- case typ of
-    AppT _ innerAst ->
-      Just innerAst
-    _ -> Nothing
-  parseInnerSensitiveAST typeParams innerAST
+  -- TODO Why was I doing this?
+  -- innerAST <- case typ of
+  --   AppT _ innerAst ->
+  --     Just innerAst
+  --   _ -> trace ("Match on Nothing in defaultParseSensitiveASTs " <> show typ) Nothing
+  -- parseInnerSensitiveAST typeParams innerAST
+  parseInnerSensitiveAST typeParams typ
 
 -- Parses sensitive ast stripped of container value.
 -- e.g. This will parse (s1 +++ s2) in SDouble (s1 +++ s2) but after the SDouble is stripped.
 parseInnerSensitiveAST :: SensitiveTypeParams -> Type -> Maybe SensitiveAST
-parseInnerSensitiveAST typeParams typ = case typ of
-  VarT name -> if  Set.member name typeParams then Just (SEnv_ name) else Nothing
-  LitT lit -> pure (TyLit_ lit)
-  AppT (AppT (ConT binaryOp) t1) t2 -> do
-    -- recursive case
-    binaryOp <- nameToBinaryOp binaryOp
-    term1 <- parseInnerSensitiveAST typeParams t1
-    term2 <- parseInnerSensitiveAST typeParams t2
-    Just $ binaryOp term1 term2
-  AppT (AppT ArrowT t1) t2 -> do -- TODO I think...
-    term1 <- parseInnerSensitiveAST typeParams t1
-    term2 <- parseInnerSensitiveAST typeParams t2
-    Just $ SFun term1 term2
-  _ -> Nothing
+parseInnerSensitiveAST typeParams typ = trace ("+++Starting Parsing for \ntyp " <> pprint typ <> "\n typ as TH " <> show typ <> "\n===\n") -- <> show typeParams <> "\n\n----\n")
+  case typ of
+    AppT _ (VarT name) -> if Set.member name typeParams then Just (SEnv_ name) else Nothing
+    -- Redundent?
+    -- How is SList parsed well probbly the above
+    -- AppT (AppT (AppT (ConT Sensitivity.SList) (PromotedT Sensitivity.L1)) (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)))
+    -- (VarT s4_6989586621679054201)
+
+    VarT name -> if  Set.member name typeParams then Just (SEnv_ name) else Nothing
+    LitT (NumTyLit n) -> pure (TyLit_ n)
+    AppT (AppT ArrowT t1) t2 -> do -- TODO I think this might get SFunctions
+      traceM $ "Match on ArrowT \nt1: " <> show t1 <> "\n\nt2: " <> show t2
+      -- TODO this is now found recursively I think?
+      -- let typeParams' = Set.union typeParams (collectSEnvTypeParams t1)
+      term1 <- parseInnerSensitiveAST typeParams t1
+      term2 <- parseInnerSensitiveAST typeParams t2
+      traceM $ "Match on inner ArrowT SUCESS Parsed \nt1: " <> show term1 <> "\n\nt2: " <> show term2
+      Just $ SFun term1 term2
+    AppT _ (AppT (AppT (ConT binaryOp) t1) t2) -> do
+      traceM ("Match on Cont " <> show binaryOp)
+      -- recursive case
+      binaryOp <- nameToBinaryOp binaryOp
+      term1 <- parseInnerSensitiveAST typeParams t1
+      term2 <- parseInnerSensitiveAST typeParams t2
+      Just $ binaryOp term1 term2
+      -- (AppT (AppT ArrowT (
+      -- There's an inner forall
+      -- ForallT [KindedTV s1p_6989586621679054130 SpecifiedSpec (AppT ListT (AppT (AppT (TupleT 2) (ConT GHC.Types.Symbol)) (ConT Sensitivity.Sensitivity))),KindedTV s2p_6989586621679054131 SpecifiedSpec (AppT ListT (AppT (AppT (TupleT 2) (ConT GHC.Types.Symbol)) (ConT Sensitivity.Sensitivity)))] []
+      -- (AppT (AppT ArrowT
+                      -- (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s1p_6989586621679054130)))
+                                     -- 2nd function
+                      -- (AppT (AppT ArrowT (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s2p_6989586621679054131))) (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (AppT (AppT (ConT Sensitivity.+++) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s1p_6989586621679054130)) (LitT (NumTyLit 1)))) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s2p_6989586621679054131)) (LitT (NumTyLit 1)))))))
+--)) (AppT (AppT ArrowT (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s5_6989586621679054128))) (AppT (AppT ArrowT (AppT (AppT (AppT (ConT Sensitivity.SList) (PromotedT Sensitivity.L1)) (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff))) (VarT s4_6989586621679054129))) (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (AppT (AppT (ConT Sensitivity.+++) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s4_6989586621679054129)) (LitT (NumTyLit 1)))) (AppT (ConT Sensitivity.TruncateInf) (VarT s5_6989586621679054128)))))))
+    AppT (AppT (ConT binaryOpWithLit) term) (LitT (NumTyLit n)) -> do
+      -- This only happens for ScaleSens
+      traceM ("Match on binaryOpWithLit " <> show binaryOpWithLit)
+      binaryOpWithLit <- nameToBinaryOpWithLit binaryOpWithLit
+      term' <- parseInnerSensitiveAST typeParams term
+      Just $ binaryOpWithLit term' n
+    AppT _ (AppT (ConT unaryOp) t) -> do
+      traceM ("Match on unaryOp " <> show unaryOp)
+      unaryOp <- nameToUnaryOp unaryOp
+      -- recursive case
+      term <- parseInnerSensitiveAST typeParams t
+      Just $ unaryOp term
+    -- Might be a higher order function
+    ForallT _ _ t' -> do
+      -- Collect for whole term
+      let (t'', typeParams') = collectSEnvTypeParams typ
+      let typeParams'' = Set.union typeParams typeParams'
+      traceM $ "Match on inner ForallT \nt: " <> show typ <> "\n\nt'': " <> show t'' <> "\n\nUpdated typeParams: " <> show typeParams''
+      parseInnerSensitiveAST typeParams'' t'
+    _ -> trace ("\nMatch on Nothing for " <> show typ <> "\n" ) Nothing
 
 -- Parses Template Haskell AST to a list of simplified ASTs
 -- SDouble Diff s -> SDouble Diff (s2 :: SEnv) -> SDouble Diff (s1 +++ s2) into a list of ASTs
 parseASTs :: Type -> ParseSensitiveAST -> ([NonSensitiveType], [SensitiveAST])
 parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
  where
-  sensitiveTypeParams = collectSEnvTypeParams typ
-  splitTypes = splitArgs (stripForall typ)
-  (unparsedTypes, sensAsts) =
+  (typ', sensitiveTypeParams) = collectSEnvTypeParams typ
+  splitTypes = splitArgs typ'
+  (unparsedTypes, sensAsts) = trace ("splitTypes " <> (show $ show <$> splitTypes) <> "type params" <> show sensitiveTypeParams) $
     foldl
       ( \(typeAcc, sensAstAcc) x -> case parseSensitiveAST sensitiveTypeParams x of
           Nothing -> (x : typeAcc, sensAstAcc)
@@ -227,21 +276,19 @@ parseASTs typ parseSensitiveAST = (reverse unparsedTypes, reverse sensAsts)
       ([] :: [Type], [] :: [SensitiveAST])
       splitTypes
 
--- Remove Forall if found
-stripForall :: Type -> Type
-stripForall t = case t of
-  ForallT _ _ t' -> t'
-  t' -> t'
 
--- Collect Sensitive type params names
-collectSEnvTypeParams :: Type -> Set Name
-collectSEnvTypeParams type_ = Debug.traceShow type_ $ case type_ of
-  ForallT typeParams _ _ -> foldr (\t acc -> case t of
-      KindedTV name _ (ConT kind) -> if isSensitive kind then acc <> Set.singleton name else acc
-      KindedTV name _ t' -> if appT t' then acc <> Set.singleton name else Set.empty
-      _ -> acc
-    ) Set.empty (Set.fromList typeParams)
-  t' -> Set.empty
+-- Collect Sensitive type params names and return the typed stripped of the forall if any
+collectSEnvTypeParams :: Type -> (Type, Set Name)
+collectSEnvTypeParams type_ = case type_ of
+  ForallT typeParams _ t' ->
+    (t',
+      foldr (\t acc -> case t of
+        KindedTV name _ (ConT kind) -> if isSensitive kind then acc <> Set.singleton name else acc
+        KindedTV name _ t' -> if appT t' then acc <> Set.singleton name else Set.empty
+        _ -> acc
+      ) Set.empty (Set.fromList typeParams)
+    )
+  t' -> (t', Set.empty)
   where
     -- Search through AppT
     appT t =
@@ -263,8 +310,17 @@ nameToBinaryOp :: Name -> Maybe (SensitiveAST -> SensitiveAST -> SensitiveAST)
 nameToBinaryOp name
   | isInfixOf "+++" $ show name = pure Plus'
   | isInfixOf "JoinSens" $ show name = pure JoinSens'
-  | isInfixOf "ScaleSens" $ show name = pure ScaleSens'
   | otherwise = trace ("Missing binary op: " <> show name) Nothing
+
+nameToUnaryOp :: Name -> Maybe (SensitiveAST -> SensitiveAST)
+nameToUnaryOp name
+  | isInfixOf "TruncateSens" $ show name = pure TruncateSens'
+  | otherwise = trace ("Missing unary op: " <> show name) Nothing
+
+nameToBinaryOpWithLit :: Name -> Maybe (SensitiveAST -> Integer -> SensitiveAST)
+nameToBinaryOpWithLit name
+  | isInfixOf "ScaleSens" $ show name = pure ScaleSens'
+  | otherwise = trace ("Missing binary op with lit: " <> show name) Nothing
 
 -- Represents generated Arguments
 newtype GeneratedArgName = GeneratedArgName Name deriving (Show, Eq, Ord)
@@ -317,7 +373,7 @@ genPropertyStatement ast senvToDistance = [e|dout <= $(computeRhs ast senvToDist
       nextLeft <- computeRhs se1 senvToDistance
       nextRight <- computeRhs se2 senvToDistance
       [|$(pure nextLeft) + $(pure nextRight)|]
-    ScaleSens' se1 (TyLit_ (NumTyLit n)) -> do
+    ScaleSens' se1 n -> do
       nextInnerExp <- computeRhs se1 senvToDistance
       [|n * $(pure nextInnerExp)|]
     JoinSens' se1 se2 -> do
