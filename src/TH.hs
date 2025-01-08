@@ -4,6 +4,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module TH where
 
@@ -15,7 +16,7 @@ import Data.Map (Map)
 import Data.Map qualified as M
 import Data.Set qualified as Set
 import Data.Set (Set (..))
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Proxy (Proxy (..))
 import Data.Traversable (for)
 import Debug.Trace qualified as Debug
@@ -135,34 +136,36 @@ genProp' parseSensitiveAST functionName = do
   inputTypeAsts <- maybe (fail noTypeAstsError) pure $ initMay typeAsts -- The input types of the function in AST form
   outputTypeAst <- maybe (fail noTypeAstsError) pure $ lastMay typeAsts -- The output of the function in AST form
 
-  -- Generate 2 input variables and a distance variable for each Input Type
-  inputTypeName <- mapM genNameForInputTypes inputTypeAsts
+  -- Generate 2 input variables and a distance variable for each Input Type except functions
+  inputTypeNames <- mapM genNameForInputType inputTypeAsts
 
   -- Generate a single input variable for each non-sensitive type
   nonSensitiveInputTypeName <- replicateM (length unparsedTypes) genNameForNonSensitiveTypes
 
   -- Create a distance statement for each Input Type given the input arguments and distance argument
-  distanceStatements <-
-    mapM
-      (\(ast, input1, input2, distance) -> genDistanceStatement ast distance input1 input2)
-      inputTypeName
+  distanceStatements <- mapM
+      (\case GenInput input1 input2 distance _ -> genDistanceStatement distance input1 input2
+             GenFunction n _ -> pure [])
+      inputTypeNames
 
+  -- TODO SFun don't think we need it
   let senvToDistance :: SEnvToDistance
-      senvToDistance =
-        M.fromListWith (++) $
-          (\(term, _, _, distanceName) -> (term, [distanceName])) <$> inputTypeName
+      senvToDistance = M.fromListWith (++) $
+        (\case GenInput _ _ distance term -> (term, [distance]); GenFunction _ term -> (term, [])) <$> inputTypeNames
 
       -- Create the distance out statement.
       -- Gather all the arguments to the first call to F and all the arguments for the second call to F
-      inputs1 = (\(_, input1, _, _) -> input1) <$> inputTypeName
-      inputs2 = (\(_, _, input2, _) -> input2) <$> inputTypeName
+      inputs1 = mapMaybe (\case GenInput input1 _ _ _ -> Just input1; _ -> Nothing) inputTypeNames
+      inputs2 = mapMaybe (\case GenInput _ input2 _ _ -> Just input2; _ -> Nothing) inputTypeNames
 
-  distanceOutStatement <- genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputTypeName
+  distanceOutStatement <- genDistanceOutStatement functionName inputTypeNames nonSensitiveInputTypeName
 
   propertyStatement <- genPropertyStatement outputTypeAst senvToDistance
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
+      hasSFunction = any (\case GenFunction _ _ -> True; _ -> False) inputTypeNames
       inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2 <> nonSensitiveInputTypeName)
-      body = Clause inputs (NormalB statements) []
+      inputs' = if hasSFunction then inputs <> [VarP $ mkName "randomNumber"] else inputs
+      body = Clause inputs' (NormalB statements) []
   pure $ FunD propName [body]
  where
   noTypeAstsError :: String
@@ -171,12 +174,21 @@ genProp' parseSensitiveAST functionName = do
       <> show functionName
       <> " no Sensitive Environments were found."
       <> "Perhaps you used this on the wrong function or you may need to adjust ParseSensitiveAST?"
-  genNameForInputTypes ast =
-    (\input1 input2 distance -> (ast, GeneratedArgName input1, GeneratedArgName input2, GeneratedDistanceName distance))
-      <$> qNewName "input1"
-      <*> qNewName "input2"
-      <*> qNewName "distance"
+  genNameForInputType ast = case ast of
+    SFun _ _ -> pure $ GenFunction (sfunctionLength ast) ast
+    _ -> (\input1 input2 distance -> GenInput (GeneratedArgName input1) (GeneratedArgName input2) (GeneratedDistanceName distance) ast)
+          <$> qNewName "input1"
+          <*> qNewName "input2"
+          <*> qNewName "distance"
   genNameForNonSensitiveTypes = GeneratedArgName <$> qNewName "nonSensitiveInput"
+
+sfunctionLength :: SensitiveAST -> Integer
+sfunctionLength (SFun a b) = 1 + sfunctionLength a + sfunctionLength b
+sfunctionLength _ = 0
+
+-- Sum type for generated names for inputs
+-- Or a function with n inputs
+data GeneratedInputOrFunction = GenInput GeneratedArgName GeneratedArgName GeneratedDistanceName SensitiveAST | GenFunction Integer SensitiveAST
 
 ---- START Sensitive Environment Parser ----
 
@@ -328,22 +340,43 @@ newtype GeneratedDistanceName = GeneratedDistanceName Name deriving (Show, Eq, O
 
 -- Generates distance statement
 -- e.g. d1 = abs $ unSDouble input1 - unSDouble input2
-genDistanceStatement :: SensitiveAST -> GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
-genDistanceStatement ast (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
+genDistanceStatement :: GeneratedDistanceName -> GeneratedArgName -> GeneratedArgName -> Q [Dec]
+genDistanceStatement (GeneratedDistanceName distance) (GeneratedArgName input1) (GeneratedArgName input2) =
   [d|$(pure $ VarP distance) = Distance.distance $(pure $ VarE input1) $(pure $ VarE input2)|]
 
 -- Generates
 -- dout = abs $ unSDouble (f x1 y1) - unSDouble (f x2 y2)
 -- Same rule for replacing abs as genDistanceStatement
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
-genDistanceOutStatement :: Name -> [GeneratedArgName] -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
-genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
+-- TODO preserve order of inputs and apply in order
+-- -- This currently forces users to put non-sensitive inputs at the end
+-- genDistanceOutStatement :: Name -> [GeneratedArgName] -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
+-- genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
+--   -- Recursively apply all inputs on function
+--   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
+--       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
+--       function1Applied = applyInputsOnFunction (inputs1 <> nonSensitiveInputs)
+--       function2Applied = applyInputsOnFunction (inputs2 <> nonSensitiveInputs)
+--    in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
+
+genDistanceOutStatement :: Name -> [GeneratedInputOrFunction] -> [GeneratedArgName] -> Q [Dec]
+genDistanceOutStatement functionName inputs nonSensitiveInputs =
   -- Recursively apply all inputs on function
-  let applyInputsOnFunction :: [GeneratedArgName] -> Exp
-      applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
-      function1Applied = applyInputsOnFunction (inputs1 <> nonSensitiveInputs)
-      function2Applied = applyInputsOnFunction (inputs2 <> nonSensitiveInputs)
+  let applyInputsOnFunction = Prelude.foldl AppE (VarE functionName)
+      sensitiveInputs1 = (\case GenInput input1 _ _ _ -> VarE $ coerce input1; GenFunction n ast -> genSFunctionTable n ast) <$> inputs
+      sensitiveInputs2 = (\case GenInput _ input2 _ _ -> VarE $ coerce input2; GenFunction n ast -> genSFunctionTable n ast) <$> inputs
+      nonSensitiveInputs' = VarE . coerce <$> nonSensitiveInputs
+      function1Applied = applyInputsOnFunction (sensitiveInputs1 <> nonSensitiveInputs')
+      function2Applied = applyInputsOnFunction (sensitiveInputs2 <> nonSensitiveInputs')
    in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
+   where
+     genSFunctionTable :: Integer -> SensitiveAST -> Exp
+     genSFunctionTable n ast =
+       let proxyArg = SigE
+                       (ConE 'Proxy)
+                       (AppT (ConT ''Proxy) (LitT (NumTyLit 1))) -- Proxy @1 TODO infer this from the AST should also apply in order of argument
+           randomArg = VarE $ mkName "randomNumber"
+       in foldl AppE (VarE $ mkName $ "sfunctionTable" <> show n) (replicate (fromInteger n) proxyArg ++ [randomArg])
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]

@@ -37,6 +37,7 @@ import Data.Kind (Type)
 import qualified GHC.TypeNats as TypeNats
 import Test.QuickCheck.Function
 import Primitives (eq_sym, scale_unit, cong)
+import SFunction
 
 -- $( sensProperty
 --     "hof"
@@ -46,6 +47,7 @@ import Primitives (eq_sym, scale_unit, cong)
 --     ]
 --  )
 
+-- TODO run it
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL1)
 
 -- $( sensCheck
