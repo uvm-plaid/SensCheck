@@ -108,13 +108,6 @@ add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UN
 solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
 solo_mixed_types a b chooseA = D_UNSAFE $ if chooseA then unSDouble a else unSDouble b
 
-solo_mixed_types_mult :: SDouble Diff s1 -> SDouble Diff (ScaleSens s1 2)
-solo_mixed_types_mult (D_UNSAFE double) = D_UNSAFE (double * 2)
-
--- Even more generic example
-solo_mixed_types_mult_generic :: TL.KnownNat n => Proxy n -> SDouble Diff s1 -> SDouble Diff (ScaleSens s1 n)
-solo_mixed_types_mult_generic proxy (D_UNSAFE double) = D_UNSAFE (double * fromIntegral (TL.natVal proxy))
-
 solo_double :: SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
 solo_double a = D_UNSAFE $ unSDouble a + unSDouble a
 

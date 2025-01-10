@@ -14,7 +14,7 @@
  -- Outputs to something like .stack-work/dist/x86_64-linux/ghc-9.6.6/build/SensCheck-test/SensCheck-test-tmp/test/Spec.thr.dump-splices
 {-# OPTIONS_GHC -ddump-to-file #-}
 
-import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_mixed_types_mult, solo_plus, solo_plus_incorrect)
+import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_plus, solo_plus_incorrect)
 import Control.Monad
 import Control.Monad.Random
 import Debug.Trace qualified as Debug
@@ -50,23 +50,24 @@ import SFunction
 -- TODO run it
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL1)
 
+
+
 -- $( sensCheck
 --     "wrongHof"
 --     ['Correct.sfoldrSDoubleDiffL2
 --     ]
 --  )
 
--- $( sensCheck
---     "passingTests"
---     [ 'Correct.solo_double
---     , 'Correct.solo_plus
---     , 'Correct.add_pair_solo
---     , 'Correct.solo_mixed_types
---     , 'Correct.solo_mixed_types_mult
---     , 'Correct.smapIdDoubles
---     , 'Correct.slistAdd42
---     ]
---  )
+$( sensCheck
+    "passingTests"
+    [ 'Correct.solo_double
+    , 'Correct.solo_plus
+    , 'Correct.add_pair_solo
+    , 'Correct.solo_mixed_types
+    , 'Correct.smapIdDoubles
+    , 'Correct.slistAdd42
+    ]
+ )
 
 -- I think each of these need to be called seperately because it's a non-homogenous list
 -- $( sensCheck
@@ -146,17 +147,18 @@ main = do
       putStrLn "To run specific suite run as stack test --test-arguments=\"pass|fail\""
       -- testSmapPropTemp
       -- Correct.smapPropMain
-      Correct.smapMain
-      Correct.sfoldrMain
+      -- Correct.smapMain
+      -- Correct.sfoldrMain
       -- hof
 --       pass
 --       fail
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
+      quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop random l1 acc1 l2 acc2)
       -- testStaticPlus
       -- testStaticScalarMult
-      -- passingTests
+      passingTests
       -- sensCheckDPClippedGrad
     fail = do
       putStrLn "\nThese tests are expected to fail:\n\n"
