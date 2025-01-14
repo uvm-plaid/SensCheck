@@ -49,8 +49,8 @@ import SFunction
 
 -- TODO run it
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL1)
-
-
+$( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL2HighSens)
+$( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiscL2)
 
 -- $( sensCheck
 --     "wrongHof"
@@ -156,6 +156,8 @@ main = do
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
       quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop random l1 acc1 l2 acc2)
+      quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiscL2Prop random l1 acc1 l2 acc2)
+      quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2HighSensProp random l1 acc1 l2 acc2)
       -- testStaticPlus
       -- testStaticScalarMult
       passingTests
