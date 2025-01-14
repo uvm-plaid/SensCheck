@@ -12,7 +12,7 @@ import Control.Monad (replicateM, unless, when, zipWithM, (>=>))
 import Control.Monad.IO.Class (liftIO)
 import Data.Coerce (coerce)
 import Data.List (isInfixOf, transpose)
-import Data.Map (Map)
+import Data.Map (Map, (!))
 import Data.Map qualified as M
 import Data.Set qualified as Set
 import Data.Set (Set (..))
@@ -363,20 +363,35 @@ genDistanceOutStatement :: Name -> [GeneratedInputOrFunction] -> [GeneratedArgNa
 genDistanceOutStatement functionName inputs nonSensitiveInputs =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction = Prelude.foldl AppE (VarE functionName)
-      sensitiveInputs1 = (\case GenInput input1 _ _ _ -> VarE $ coerce input1; GenFunction n ast -> genSFunctionTable n ast) <$> inputs
-      sensitiveInputs2 = (\case GenInput _ input2 _ _ -> VarE $ coerce input2; GenFunction n ast -> genSFunctionTable n ast) <$> inputs
+      sensitiveInputs1 = (\case GenInput input1 _ _ _ -> VarE $ coerce input1; GenFunction n ast -> genSFunctionTable ast) <$> inputs
+      sensitiveInputs2 = (\case GenInput _ input2 _ _ -> VarE $ coerce input2; GenFunction n ast -> genSFunctionTable ast) <$> inputs
       nonSensitiveInputs' = VarE . coerce <$> nonSensitiveInputs
       function1Applied = applyInputsOnFunction (sensitiveInputs1 <> nonSensitiveInputs')
       function2Applied = applyInputsOnFunction (sensitiveInputs2 <> nonSensitiveInputs')
    in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
    where
-     genSFunctionTable :: Integer -> SensitiveAST -> Exp
-     genSFunctionTable n ast =
-       let proxyArg = SigE
+     -- Generates a function table for higher order functions
+     -- This could be improved to handle more unusual cases but for now it's sufficient
+     genSFunctionTable :: SensitiveAST -> Exp
+     genSFunctionTable ast =
+       let (args, senvToProxy) = mkSEnvToProxy ast (Set.empty, M.empty)
+           proxyArg i = SigE
                        (ConE 'Proxy)
-                       (AppT (ConT ''Proxy) (LitT (NumTyLit 1))) -- Proxy @1 TODO infer this from the AST should also apply in order of argument
-           randomArg = VarE $ mkName "randomNumber"
-       in foldl AppE (VarE $ mkName $ "sfunctionTable" <> show n) (replicate (fromInteger n) proxyArg ++ [randomArg])
+                       (AppT (ConT ''Proxy) (LitT (NumTyLit i)))
+           randomArg = trace ("genSFunctionTAble : " <> show ast) $ VarE $ mkName "randomNumber"
+           proxyArgs = trace ("genSFunctionTAble : " <> show senvToProxy) $
+             (\name -> proxyArg $ head $ senvToProxy ! name) <$> Set.toList args
+           sFunctionTable = VarE $ mkName $ "sfunctionTable" <> show (length args)
+       in foldl AppE sFunctionTable $ proxyArgs <> [randomArg]
+
+     mkSEnvToProxy :: SensitiveAST -> (Set Name, Map Name [Integer]) -> (Set Name, Map Name [Integer])
+     mkSEnvToProxy ast acc@(args, senvAcc) = case ast of
+        SFun a b -> mkSEnvToProxy b $ mkSEnvToProxy a acc
+        SEnv_ name -> (args <> Set.singleton name, senvAcc)
+        ScaleSens' (SEnv_ name) n -> (args, M.insertWith (++) name [n] senvAcc)
+        Plus' a b -> mkSEnvToProxy a acc <> mkSEnvToProxy b acc
+        -- not supported yet
+        _ -> (args, senvAcc)
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]
