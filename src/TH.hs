@@ -48,7 +48,7 @@ traceM = if debug then Debug.traceM else \_ -> pure ()
 
 -- Enable verbose logging
 verbose :: Bool
-verbose = True
+verbose = False
 
 -- Padding due to floating point imprecision
 -- This demonstrates a mismatch between implementation
@@ -124,7 +124,7 @@ genProp' parseSensitiveAST functionName = do
 
   -- Log parsing results
   when verbose $ liftIO $ putStrLn $ "Parsed types: " <> show typeAsts <> "\n-----"
-  unless (null unparsedTypes) do
+  unless (null unparsedTypes && verbose) do
     liftIO $
       putStrLn $
         "Warning: The following types were not parsed as sensitive types. "
@@ -148,7 +148,6 @@ genProp' parseSensitiveAST functionName = do
              GenFunction n _ -> pure [])
       inputTypeNames
 
-  -- TODO SFun don't think we need it
   let senvToDistance :: SEnvToDistance
       senvToDistance = M.fromListWith (++) $
         (\case GenInput _ _ distance term -> (term, [distance]); GenFunction _ term -> (term, [])) <$> inputTypeNames
@@ -224,39 +223,59 @@ parseInnerSensitiveAST typeParams typ = trace ("+++Starting Parsing for \ntyp " 
     -- Redundent?
     -- How is SList parsed well probbly the above
     -- AppT (AppT (AppT (ConT Sensitivity.SList) (PromotedT Sensitivity.L1)) (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)))
+
     -- (VarT s4_6989586621679054201)
 
-    VarT name -> if  Set.member name typeParams then Just (SEnv_ name) else Nothing
+    VarT name -> if Set.member name typeParams then Just (SEnv_ name) else Nothing
     LitT (NumTyLit n) -> pure (TyLit_ n)
-    AppT (AppT ArrowT t1) t2 -> do -- TODO I think this might get SFunctions
+    -- Matches on t1 -> t2
+    -- Then parses t1 and t2 recursively
+    -- e.g. a 2 arg function:
+    -- SDouble Diff s -> SDouble Diff (s2 :: SEnv) -> SDouble Diff (s1 +++ s2)
+    -- Parses as: SFun (SEnv_ s) (SFun (SEnv_ s2) (SEnv_ s1))
+    AppT (AppT ArrowT t1) t2 -> do
       traceM $ "Match on ArrowT \nt1: " <> show t1 <> "\n\nt2: " <> show t2
-      -- TODO this is now found recursively I think?
-      -- let typeParams' = Set.union typeParams (collectSEnvTypeParams t1)
       term1 <- parseInnerSensitiveAST typeParams t1
       term2 <- parseInnerSensitiveAST typeParams t2
       traceM $ "Match on inner ArrowT SUCESS Parsed \nt1: " <> show term1 <> "\n\nt2: " <> show term2
       Just $ SFun term1 term2
-    AppT _ (AppT (AppT (ConT binaryOp) t1) t2) -> do
+    -- Matches on binaryOpWithLit term n
+    -- Where n is a numeric literal
+    -- Then searches for matching binaryOpWithLit in SensitiveAST of type SensitiveAST -> Integer -> SensitiveAST
+    -- e.g. ScaleSens s n parses as ScaleSens' (SEnv_ s) (TyLit_ n)
+    -- TODO doesn't seem to match on 2nd term in
+    -- Sensitivity.SDouble 'Sensitivity.Diff s1_0 -> Sensitivity.SDouble 'Sensitivity.Diff (Sensitivity.ScaleSens s1_0 1)
+    -- Namely Sensitivity.SDouble 'Sensitivity.Diff (Sensitivity.ScaleSens s1_0 1)
+    -- AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff))
+    --      (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s1_6989586621679054334)) (LitT (NumTyLit 1)))
+    -- Hmm so I can see why this matches in the other case since it starts with AppT
+
+
+    AppT (AppT (ConT binaryOpWithLit) term) (LitT (NumTyLit n)) -> do
+      traceM ("Match on binaryOpWithLit " <> show binaryOpWithLit)
+      binaryOpWithLit <- nameToBinaryOpWithLit binaryOpWithLit
+      term' <- parseInnerSensitiveAST typeParams term
+      Just $ binaryOpWithLit term' n
+    -- TODO copying this stuct too
+    AppT debugFst@_ debugSnd@(AppT (AppT (ConT binaryOpWithLit) term) (LitT (NumTyLit n))) -> do
+      traceM ("Match on binaryOpWithLit " <> show binaryOpWithLit)
+      binaryOpWithLit <- nameToBinaryOpWithLit binaryOpWithLit
+      term' <- parseInnerSensitiveAST typeParams term
+      Just $ binaryOpWithLit term' n
+    -- Matches on binaryOp term1 term2
+    -- Then searches for matching binaryOp in SensitiveAST of type SensitiveAST -> SensitiveAST -> SensitiveAST
+    -- e.g. s1 +++ s2 parses as Plus' (SEnv_ s1) (SEnv_ s2)
+    AppT debugFst@_ debugSnd@(AppT (AppT (ConT binaryOp) t1) t2) -> do
       traceM ("Match on Cont " <> show binaryOp)
+      traceM $ "Ignoring first part: " <> show debugFst <> "\n pprint; " <> pprint debugFst <> "\n\n 2nd" <> show debugSnd <> "\n\n" <> pprint debugSnd
       -- recursive case
       binaryOp <- nameToBinaryOp binaryOp
       term1 <- parseInnerSensitiveAST typeParams t1
       term2 <- parseInnerSensitiveAST typeParams t2
       Just $ binaryOp term1 term2
-      -- (AppT (AppT ArrowT (
-      -- There's an inner forall
-      -- ForallT [KindedTV s1p_6989586621679054130 SpecifiedSpec (AppT ListT (AppT (AppT (TupleT 2) (ConT GHC.Types.Symbol)) (ConT Sensitivity.Sensitivity))),KindedTV s2p_6989586621679054131 SpecifiedSpec (AppT ListT (AppT (AppT (TupleT 2) (ConT GHC.Types.Symbol)) (ConT Sensitivity.Sensitivity)))] []
-      -- (AppT (AppT ArrowT
-                      -- (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s1p_6989586621679054130)))
-                                     -- 2nd function
-                      -- (AppT (AppT ArrowT (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s2p_6989586621679054131))) (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (AppT (AppT (ConT Sensitivity.+++) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s1p_6989586621679054130)) (LitT (NumTyLit 1)))) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s2p_6989586621679054131)) (LitT (NumTyLit 1)))))))
---)) (AppT (AppT ArrowT (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (VarT s5_6989586621679054128))) (AppT (AppT ArrowT (AppT (AppT (AppT (ConT Sensitivity.SList) (PromotedT Sensitivity.L1)) (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff))) (VarT s4_6989586621679054129))) (AppT (AppT (ConT Sensitivity.SDouble) (PromotedT Sensitivity.Diff)) (AppT (AppT (ConT Sensitivity.+++) (AppT (AppT (ConT Sensitivity.ScaleSens) (VarT s4_6989586621679054129)) (LitT (NumTyLit 1)))) (AppT (ConT Sensitivity.TruncateInf) (VarT s5_6989586621679054128)))))))
-    AppT (AppT (ConT binaryOpWithLit) term) (LitT (NumTyLit n)) -> do
-      -- This only happens for ScaleSens
-      traceM ("Match on binaryOpWithLit " <> show binaryOpWithLit)
-      binaryOpWithLit <- nameToBinaryOpWithLit binaryOpWithLit
-      term' <- parseInnerSensitiveAST typeParams term
-      Just $ binaryOpWithLit term' n
+    -- Matches on unaryOp term
+    -- Then searches for matching unaryOp in SensitiveAST of type SensitiveAST -> SensitiveAST
+    -- e.g. TruncateSens s1 parses as TruncateSens' s1
     AppT _ (AppT (ConT unaryOp) t) -> do
       traceM ("Match on unaryOp " <> show unaryOp)
       unaryOp <- nameToUnaryOp unaryOp
@@ -350,15 +369,6 @@ genDistanceStatement (GeneratedDistanceName distance) (GeneratedArgName input1) 
 -- dout = abs $ unSDouble (f x1 y1 z1) - unSDouble (f x2 y2 z1)
 -- TODO preserve order of inputs and apply in order
 -- -- This currently forces users to put non-sensitive inputs at the end
--- genDistanceOutStatement :: Name -> [GeneratedArgName] -> [GeneratedArgName] -> [GeneratedArgName] -> Q [Dec]
--- genDistanceOutStatement functionName inputs1 inputs2 nonSensitiveInputs =
---   -- Recursively apply all inputs on function
---   let applyInputsOnFunction :: [GeneratedArgName] -> Exp
---       applyInputsOnFunction args = Prelude.foldl (\acc arg -> AppE acc (VarE arg)) (VarE functionName) (coerce <$> args)
---       function1Applied = applyInputsOnFunction (inputs1 <> nonSensitiveInputs)
---       function2Applied = applyInputsOnFunction (inputs2 <> nonSensitiveInputs)
---    in [d|dout = Distance.distance $(pure function1Applied) $(pure function2Applied)|]
-
 genDistanceOutStatement :: Name -> [GeneratedInputOrFunction] -> [GeneratedArgName] -> Q [Dec]
 genDistanceOutStatement functionName inputs nonSensitiveInputs =
   -- Recursively apply all inputs on function
@@ -381,7 +391,8 @@ genDistanceOutStatement functionName inputs nonSensitiveInputs =
            randomArg = trace ("genSFunctionTAble : " <> show ast) $ VarE $ mkName "randomNumber"
            proxyArgs = trace ("genSFunctionTAble : " <> show senvToProxy) $
              (\name -> proxyArg $ head $ senvToProxy ! name) <$> Set.toList args
-           sFunctionTable = VarE $ mkName $ "sfunctionTable" <> show (length args)
+           arity = length args
+           sFunctionTable = VarE $ mkName $ "sfunctionTable" <> if arity == 1 then "" else show arity
        in foldl AppE sFunctionTable $ proxyArgs <> [randomArg]
 
      mkSEnvToProxy :: SensitiveAST -> (Set Name, Map Name [Integer]) -> (Set Name, Map Name [Integer])

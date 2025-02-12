@@ -12,7 +12,7 @@
 
 {-# OPTIONS_GHC -ddump-splices #-}
  -- Outputs to something like .stack-work/dist/x86_64-linux/ghc-9.6.6/build/SensCheck-test/SensCheck-test-tmp/test/Spec.thr.dump-splices
-{-# OPTIONS_GHC -ddump-to-file #-}
+-- {-# OPTIONS_GHC -ddump-to-file #-}
 
 import AnnotatedExternalLibrary (add_dependently_typed_matrix_solo, add_matrix_solo, add_pair_solo, solo_mixed_types, solo_plus, solo_plus_incorrect)
 import Control.Monad
@@ -47,7 +47,9 @@ import SFunction
 --     ]
 --  )
 
--- TODO run it
+$( singleton <$> sensProperty 'Correct.smapSDoubleDiffL2)
+$( singleton <$> sensProperty 'Correct.smapSDoubleDiffL2HighSens)
+
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL1)
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiffL2HighSens)
 $( singleton <$> sensProperty 'Correct.sfoldrSDoubleDiscL2)
@@ -155,6 +157,8 @@ main = do
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
+      quickCheck (\random (SameSizedSLists l1 l2) -> smapSDoubleDiffL2Prop l1 l2 random )
+      quickCheck (\random (SameSizedSLists l1 l2) -> smapSDoubleDiffL2HighSensProp l1 l2 random )
       quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop random l1 acc1 l2 acc2)
       quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiscL2Prop random l1 acc1 l2 acc2)
       quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2HighSensProp random l1 acc1 l2 acc2)

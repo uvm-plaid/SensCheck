@@ -133,6 +133,7 @@ smapIdDoubles = smapId @L2 @(SDouble Diff)
 -- The same restriction applies on making types concrete
 
 -- The user writes this making it monomorphic except for any SEnv
+smapSDoubleDiffL2 :: (forall (s1 :: SEnv).  SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList L2 (SDouble Diff) w -> SList L2 (SDouble Diff) (ScaleSens w 1)
 smapSDoubleDiffL2 = smap @1 @(SDouble Diff) @(SDouble Diff) @_ @L2
 
 -- sensCheck generates this
@@ -194,3 +195,5 @@ sfoldrMain = do
   quickCheck $ withMaxSuccess 1000 (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiffL2Prop random l1 l2)
   putStrLn "Testing 2-sens sfoldr"
   quickCheck (\random (SameSizedSLists l1 l2) -> sfoldrSDoubleDiscPropHighSens random l1 l2)
+
+smapSDoubleDiffL2HighSens = smap @300 @(SDouble Diff) @(SDouble Diff) @_ @L2
