@@ -14,7 +14,6 @@ import Grenade
 import Grenade.Core.Shape
 import Numeric.LinearAlgebra qualified as LA
 import Numeric.LinearAlgebra.Data qualified as LAD
-import Numeric.LinearAlgebra.Static (Sized (unwrap))
 import Numeric.LinearAlgebra.Static qualified as LAS
 import Sensitivity (CMetric (..), DPSMatrix (DPSMatrix_UNSAFE), NMetric (..), SDouble (D_UNSAFE), SList (SList_UNSAFE, unSList), SMatrix (SMatrix_UNSAFE), SPair (P_UNSAFE), unSDouble, ScaleSens)
 import Utils (toDoubleMatrix, toDoubleMatrix')
@@ -22,13 +21,14 @@ import SensStaticHMatrix (SensStaticHMatrix (SensStaticHMatrixUNSAFE))
 import qualified Numeric.LinearAlgebra.HMatrix as HMatrix
 import qualified Numeric.LinearAlgebra.Static as Static
 import GHC.TypeLits (KnownNat)
+import Primitives (Unsafe(..))
 
 class Distance a where
   distance :: a -> a -> Double
 
 -- Base Types
 instance Distance (SDouble Diff senv) where
-  distance a b = absdist (unSDouble a) (unSDouble b)
+  distance a b = absdist (unwrap a) (unwrap b)
 
 instance Distance (SDouble Disc senv) where
   distance a b = discdist (unSDouble a) (unSDouble b)
