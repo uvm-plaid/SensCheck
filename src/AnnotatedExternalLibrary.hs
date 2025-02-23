@@ -43,17 +43,17 @@ unsafe_unsafe_plus_prop x1 y1 x2 y2 =
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
-solo_plus a b = wrap $ unsafe_plus (unSDouble a) (unSDouble b)
+solo_plus a b = wrap $ unsafe_plus (unwrap a) (unwrap b)
 
 -- This is a "developer" who's reexposed but implemented incorrectly.
 solo_plus_incorrect :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff s1
-solo_plus_incorrect a b = wrap $ unsafe_plus (unSDouble a) (unSDouble b)
+solo_plus_incorrect a b = wrap $ unsafe_plus (unwrap a) (unwrap b)
 
 solo_plus_prop :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 solo_plus_prop a1 a2 b1 b2 =
-  let d1 = abs $ unSDouble a1 - unSDouble a2
-      d2 = abs $ unSDouble b1 - unSDouble b2
-      dout = abs $ unSDouble (solo_plus a1 b1) - unSDouble (solo_plus a2 b2)
+  let d1 = abs $ unwrap a1 - unwrap a2
+      d2 = abs $ unwrap b1 - unwrap b2
+      dout = abs $ unwrap (solo_plus a1 b1) - unwrap (solo_plus a2 b2)
    in dout <= d1 + d2 + 0.000000001
 
 -- Without Solo - L2 sensitivity of matrix addition
@@ -78,7 +78,7 @@ add_matrix_solo :: SDoubleMatrixL2 s1 -> SDoubleMatrixL2 s2 -> SDoubleMatrixL2 (
 add_matrix_solo m1 m2 =
   SMatrix_UNSAFE $
     wrap
-      <$> (unSDouble <$> unSMatrix m1) + (unSDouble <$> unSMatrix m2)
+      <$> (unwrap <$> unSMatrix m1) + (unwrap <$> unSMatrix m2)
 
 prop_safe_add_solo ::
   SDoubleMatrixL2 '[] ->
@@ -97,7 +97,7 @@ add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrix
 add_dependently_typed_matrix_solo m1 m2 =
   DPSMatrix_UNSAFE $
     wrap
-      <$> (unSDouble <$> unDPSMatrix m1) + (unSDouble <$> unDPSMatrix m2)
+      <$> (unwrap <$> unDPSMatrix m1) + (unwrap <$> unDPSMatrix m2)
 
 -- add_pair_solo (P_UNSAFE (wrap al, wrap ar)) (P_UNSAFE (wrap bl, wrap br)) =
 --   P_UNSAFE (wrap $ al + bl, wrap $ ar + br)
@@ -111,10 +111,10 @@ add_pair_solo a b =
 
 -- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
 solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
-solo_mixed_types a b chooseA = wrap $ if chooseA then unSDouble a else unSDouble b
+solo_mixed_types a b chooseA = wrap $ if chooseA then unwrap a else unwrap b
 
 solo_double :: SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
-solo_double a = wrap $ unSDouble a + unSDouble a
+solo_double a = wrap $ unwrap a + unwrap a
 
 -- Sensitive identity function
 sid :: a s -> a (ScaleSens s 1)
@@ -125,7 +125,7 @@ smapId = cong scale_unit . smap @1 sid
 
 -- Example demonstrating a higher order function that is applied
 slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
-slistAddConst const = cong scale_unit . smap @1 (\x -> wrap $ unSDouble x + const)
+slistAddConst const = cong scale_unit . smap @1 (\x -> wrap $ unwrap x + const)
 
 -- | Functions need to be instantiated with a concete type (since there is an infite number of types)
 -- Ideally we could do this inline this but TH seems to have an issue
