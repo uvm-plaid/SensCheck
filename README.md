@@ -24,14 +24,20 @@ main = tests
 
 ## How to build this repo
 
-First install blas and lapack
 
 ### Dependencies
+
+First install blas and lapack
 
 **Ubuntu**
 
 ```bash
 sudo apt-get install libblas-dev liblapack-dev
+```
+
+**Fedora**
+```bash
+sudo dnf install blas-devel lapack-devel
 ```
 
 ### Build

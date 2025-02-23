@@ -49,8 +49,6 @@ class SFunction a inSens b outputSens p where
 
 -- A function that takes a SDouble and scales it *up to* a factor of scalar
 instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Diff) s1 (SDouble Diff) s2 scalar where
-  -- This works however this doesn't really create any random function that is n-sensitive (where n = scalar)
-
   sfunctionTable p random d =
        let scalar = TL.natVal p
            scaleFactor = random `mod'` fromIntegral scalar
@@ -61,10 +59,6 @@ instance (s2 ~ ScaleSens s1 scalar, TL.KnownNat scalar) => SFunction (SDouble Di
        let scalar = TL.natVal p
            scaleFactor = random `mod'` fromIntegral scalar
        in D_UNSAFE $ unSDouble d * scaleFactor
-
--- This does not work
-instance (SFunction a inSens b bSens p, SFunction b bSens c outputSens p) => SFunction a inSens c outputSens (p, b bSens) where
-  sfunctionTable p random a = let (b :: b bSens) = sfunctionTable (Proxy @p) random a in sfunctionTable (Proxy @p) random b
 
 -- Two argument functions
 class SFunction2 a aInSens b bInSens c outputSens p1 p2 where
