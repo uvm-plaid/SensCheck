@@ -181,8 +181,8 @@ sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (Unsafe t1, Unsafe t2) =>
             t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
         -> t2 s5 -- Initial Acc
         -> SList cm t1 s4
-        -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
-sfoldr f init (SList_UNSAFE xs) = wrap @t2 $ unwrap $ foldr (\x acc -> wrap @t2 . unwrap $ f x acc ) init xs
+        -> t2 (ScaleSens s4 (MaxNat fn_sens1 fn_sens2) +++ TruncateInf s5)
+sfoldr f init xs = wrap $ unwrap $ foldr (\x acc -> wrap $ unwrap $ (f $ wrap x) acc ) init (unwrap xs)
 
 sfoldr' :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 s1p s2p.
            (t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))

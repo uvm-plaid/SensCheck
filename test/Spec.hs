@@ -163,7 +163,6 @@ main = do
       quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) -> smapSDoubleDiffL2HighSensProp l1 l2 random )
       quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop random l1 acc1 l2 acc2)
       quickCheck $ withMaxSuccess 100000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiscL2Prop random l1 acc1 l2 acc2)
-      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2Prop random l1 acc1 l2 acc2)
       -- testStaticPlus
       -- testStaticScalarMult
       passingTests
@@ -172,4 +171,5 @@ main = do
       putStrLn "\nThese tests are expected to fail:\n\n"
       -- failingTests
       quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2HighSensProp random l1 acc1 l2 acc2)
+      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2Prop random l1 acc1 l2 acc2)
       -- testStaticMultIncorrect
