@@ -19,6 +19,7 @@
    ,EmptyCase
    #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Primitives where
 import Prelude hiding (return,(>>=), sum)
 import qualified Prelude as P
@@ -27,6 +28,7 @@ import Data.Proxy
 
 import Sensitivity
 import Privacy
+import Data.Bifunctor (Bifunctor(..))
 
 --------------------------------------------------
 -- Axioms about sensitivities
@@ -140,18 +142,28 @@ scons x xs = undefined
 -- Solo left the implementations of these functions undefined (or would eventually lead to an undefined in the case of smap)
 -- In this work we actually need these functions to run so we've fixed those functions requiring this typeclass
 -- Only trusted primitives should be able to use this typeclass directly, and those trusted primitives can be tested with SensCheck
-class SPrimitive b where
+class Unsafe b where
   type Unsens b
   wrap :: forall s. Unsens b -> b s
   unwrap :: forall s. b s -> Unsens b
 
 -- There is only 1 primative type in Solo
-instance SPrimitive (SDouble m) where
+instance Unsafe (SDouble m) where
   type Unsens (SDouble m) = Double
   wrap :: Double -> SDouble m s
   wrap = D_UNSAFE
   unwrap :: SDouble m s -> Double
   unwrap = unSDouble
+
+instance (Unsafe a) => Unsafe (SList m a) where
+  type Unsens (SList m a) = [Unsens a]
+  wrap = SList_UNSAFE . fmap wrap
+  unwrap = fmap unwrap . unSList
+
+instance (Unsafe a, Unsafe b) => Unsafe (SPair m a b) where
+  type Unsens (SPair m a b) = (Unsens a, Unsens b)
+  wrap (a, b) = P_UNSAFE (wrap a, wrap b)
+  unwrap = bimap unwrap unwrap . unSPair
 
 -- Previous unworking sfoldr
 sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
@@ -162,9 +174,9 @@ sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5.
         -> t2 ((ScaleSens s4 (MaxNat fn_sens1 fn_sens2)) +++ TruncateInf s5)
 sfoldr_ f init xs = undefined
 
--- A running implementation using the SPrimitve typeclass
+-- A running implementation using the Unsafe typeclass
 -- However after using SensCheck this is actually incorrect for anything more than 1 sensitive and L1 sensitivity
-sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
+sfoldr :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (Unsafe t1, Unsafe t2) =>
            (forall s1p s2p.
             t1 s1p -> t2 s2p -> t2 ((ScaleSens s1p fn_sens1) +++ (ScaleSens s2p fn_sens2)))
         -> t2 s5 -- Initial Acc

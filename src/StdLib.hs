@@ -49,7 +49,7 @@ sum xs = cong scale_unit $ sfoldr @1 @1 sumFn (sConstD @'[] 0) xs
 clipList :: L1List (SDouble Disc) s -> L1List (SDouble Diff) s
 clipList xs = cong scale_unit $ smap @1 (\x -> cong (eq_sym scale_unit) $ clipDouble x) xs
 
-smap :: forall fn_sens a b s2 m . (SPrimitive a, SPrimitive b) =>
+smap :: forall fn_sens a b s2 m . (Unsafe a, Unsafe b) =>
   (forall s1. a s1 -> b (ScaleSens s1 fn_sens))
   -> SList m a s2
   -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
@@ -61,13 +61,6 @@ smap_ :: forall fn_sens a b s2 m.
    -> SList m a s2
    -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
 smap_ f as = sfoldr_ @fn_sens @1 (\x xs -> scons (f x) (cong (eq_sym scale_unit) xs)) (sConstL @'[] []) as
-
-smap_NoRank2 :: forall fn_sens a b s2 m . (SPrimitive a, SPrimitive b) =>
-  (a s2 -> b (ScaleSens s2 fn_sens))
-  -> SList m a s2
-  -> SList m b (ScaleSens s2 (MaxNat fn_sens 1))
-
-smap_NoRank2 f (SList_UNSAFE l) = SList_UNSAFE $ (wrap @b) . unwrap . f <$> l
 
 -- TODO test this
 sfilter :: (forall s. Double -> Bool)

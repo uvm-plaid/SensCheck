@@ -1,33 +1,33 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {- HLINT ignore "Use camelCase" -}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds#-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module AnnotatedExternalLibrary where
 
 import Control.Monad (replicateM)
+import Data.Bifunctor (Bifunctor (..))
+import Data.Data (Proxy (..))
 import Data.Matrix qualified as Matrix
 import Debug.Trace (trace)
+import Debug.Trace qualified as Debug
 import Distance
-import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), NMetric (..), SDouble (..), SDoubleMatrixL2, SEnv, SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), type (+++), SList (unSList), JoinSens, ScaleSens, MaxNat, TruncateInf)
-import Utils
-import qualified GHC.TypeLits as TL
-import Data.Data (Proxy (..))
-import Primitives
-import StdLib
-import Test.QuickCheck (Gen, quickCheck, forAll, again, withMaxSuccess)
-import SFunction
 import GHC.Base (Type)
-import qualified Debug.Trace as Debug
+import GHC.TypeLits qualified as TL
+import Primitives
+import SFunction
+import Sensitivity (CMetric (..), DPSDoubleMatrixL2, DPSMatrix (DPSMatrix_UNSAFE, unDPSMatrix), JoinSens, MaxNat, NMetric (..), SDouble (..), SDoubleMatrixL2, SEnv, SList (unSList), SMatrix (SMatrix_UNSAFE, unSMatrix), SPair (P_UNSAFE), ScaleSens, TruncateInf, type (+++))
+import StdLib
+import Test.QuickCheck (Gen, again, forAll, quickCheck, withMaxSuccess)
+import Utils
 
-{- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
- Also includes examples of manually generated props
--}
+-- | This Module simulates a developer re-exposing "unsafe" external libraries as solo annotated functions
+-- Also includes examples of manually generated props
 
 -- This is a function from an external library for example hmatrix
 unsafe_plus :: Double -> Double -> Double
@@ -43,11 +43,11 @@ unsafe_unsafe_plus_prop x1 y1 x2 y2 =
 
 -- This is a "developer" who's reexposed it with sensitivity annotations. But is it right? We will test that.
 solo_plus :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff (s1 +++ s2)
-solo_plus a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
+solo_plus a b = wrap $ unsafe_plus (unSDouble a) (unSDouble b)
 
 -- This is a "developer" who's reexposed but implemented incorrectly.
 solo_plus_incorrect :: SDouble Diff s1 -> SDouble Diff s2 -> SDouble Diff s1
-solo_plus_incorrect a b = D_UNSAFE $ unsafe_plus (unSDouble a) (unSDouble b)
+solo_plus_incorrect a b = wrap $ unsafe_plus (unSDouble a) (unSDouble b)
 
 solo_plus_prop :: SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> SDouble Diff '[] -> Bool
 solo_plus_prop a1 a2 b1 b2 =
@@ -77,7 +77,7 @@ prop_unsafe_add a1 a2 b1 b2 =
 add_matrix_solo :: SDoubleMatrixL2 s1 -> SDoubleMatrixL2 s2 -> SDoubleMatrixL2 (s1 +++ s2)
 add_matrix_solo m1 m2 =
   SMatrix_UNSAFE $
-    D_UNSAFE
+    wrap
       <$> (unSDouble <$> unSMatrix m1) + (unSDouble <$> unSMatrix m2)
 
 prop_safe_add_solo ::
@@ -96,31 +96,36 @@ prop_safe_add_solo a1 a2 b1 b2 =
 add_dependently_typed_matrix_solo :: DPSDoubleMatrixL2 x y s1 -> DPSDoubleMatrixL2 x y s2 -> DPSDoubleMatrixL2 x y (s1 +++ s2)
 add_dependently_typed_matrix_solo m1 m2 =
   DPSMatrix_UNSAFE $
-    D_UNSAFE
+    wrap
       <$> (unSDouble <$> unDPSMatrix m1) + (unSDouble <$> unDPSMatrix m2)
 
+-- add_pair_solo (P_UNSAFE (wrap al, wrap ar)) (P_UNSAFE (wrap bl, wrap br)) =
+--   P_UNSAFE (wrap $ al + bl, wrap $ ar + br)
 add_pair_solo :: SPair L2 (SDouble Diff) (SDouble Diff) s1 -> SPair L2 (SDouble Diff) (SDouble Diff) s2 -> SPair L2 (SDouble Diff) (SDouble Diff) (s1 +++ s2)
-add_pair_solo (P_UNSAFE (D_UNSAFE al, D_UNSAFE ar)) (P_UNSAFE (D_UNSAFE bl, D_UNSAFE br)) = P_UNSAFE (D_UNSAFE $ al + bl, D_UNSAFE $ ar + br)
+add_pair_solo a b =
+  let (al, ar) = unwrap a
+      (bl, br) = unwrap b
+   in wrap (al + bl, ar + br)
 
 -- Examples with mixed types
 
 -- This is an example of mixed typed function to show how Solo can handle sensitive and non-sensitive types
 solo_mixed_types :: SDouble Diff s1 -> SDouble Diff s2 -> Bool -> SDouble Diff (JoinSens s1 s2)
-solo_mixed_types a b chooseA = D_UNSAFE $ if chooseA then unSDouble a else unSDouble b
+solo_mixed_types a b chooseA = wrap $ if chooseA then unSDouble a else unSDouble b
 
 solo_double :: SDouble Diff s1 -> SDouble Diff (s1 +++ s1)
-solo_double a = D_UNSAFE $ unSDouble a + unSDouble a
+solo_double a = wrap $ unSDouble a + unSDouble a
 
 -- Sensitive identity function
 sid :: a s -> a (ScaleSens s 1)
 sid = cong (eq_sym scale_unit)
 
-smapId :: forall m b s2. (SPrimitive b) => SList m b s2 -> SList m b s2
+smapId :: forall m b s2. (Unsafe b) => SList m b s2 -> SList m b s2
 smapId = cong scale_unit . smap @1 sid
 
 -- Example demonstrating a higher order function that is applied
 slistAddConst :: forall m s. Double -> SList m (SDouble Diff) s -> SList m (SDouble Diff) s
-slistAddConst const = cong scale_unit . smap @1 (\x -> D_UNSAFE $ unSDouble x + const)
+slistAddConst const = cong scale_unit . smap @1 (\x -> wrap $ unSDouble x + const)
 
 -- | Functions need to be instantiated with a concete type (since there is an infite number of types)
 -- Ideally we could do this inline this but TH seems to have an issue
@@ -133,7 +138,7 @@ smapIdDoubles = smapId @L2 @(SDouble Diff)
 -- The same restriction applies on making types concrete
 
 -- The user writes this making it monomorphic except for any SEnv
-smapSDoubleDiffL2 :: (forall (s1 :: SEnv).  SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList L2 (SDouble Diff) w -> SList L2 (SDouble Diff) (ScaleSens w 1)
+smapSDoubleDiffL2 :: (forall (s1 :: SEnv). SDouble Diff s1 -> SDouble Diff (ScaleSens s1 1)) -> SList L2 (SDouble Diff) w -> SList L2 (SDouble Diff) (ScaleSens w 1)
 smapSDoubleDiffL2 = smap @1 @(SDouble Diff) @(SDouble Diff) @_ @L2
 
 -- sensCheck generates this
@@ -141,7 +146,7 @@ smapSDoubleProp :: Double -> SList L2 (SDouble Diff) s2 -> SList L2 (SDouble Dif
 smapSDoubleProp randomNumber xs ys =
   let distIn = distance xs ys
       distOut = distance (smapSDoubleDiffL2 (sfunctionTable (Proxy @1) randomNumber) xs) (smapSDoubleDiffL2 (sfunctionTable (Proxy @1) randomNumber) ys)
-  in distOut <= distIn
+   in distOut <= distIn
 
 -- They may also test it for other concrete types
 smapSDoubleDiscL2 = smap @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
@@ -156,10 +161,12 @@ smapSDoubleDiscL2 = smap @1 @(SDouble Disc) @(SDouble Disc) @_ @L2
 smapMain :: IO ()
 smapMain = do
   quickCheck smapSDoubleProp
-  -- quickCheck $ smapSDoubleDiscProp
 
--- sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (SPrimitive t1, SPrimitive t2) =>
+-- quickCheck $ smapSDoubleDiscProp
+
+-- sfoldr_ :: forall fn_sens1 fn_sens2 t1 t2 cm s3 s4 s5 . (Unsafe t1, Unsafe t2) =>
 sfoldrSDoubleDiffL2 = sfoldr @1 @1 @(SDouble Diff) @(SDouble Diff) @L2
+
 sfoldrSDoubleDiffL1 = sfoldr @1 @1 @(SDouble Diff) @(SDouble Diff) @L1
 
 sfoldrSDoubleDiscL2 = sfoldr @1 @1 @(SDouble Disc) @(SDouble Disc) @L2
@@ -175,7 +182,7 @@ sfoldrSDoubleDiffL2Prop :: forall s4 s5. Double -> SList L2 (SDouble Diff) s4 ->
 sfoldrSDoubleDiffL2Prop randomNumber xs ys init =
   let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init xs) (sfoldrSDoubleDiffL2 (sfunctionTable2 (Proxy @1) (Proxy @1) randomNumber) init ys)
-  in distOut <= distIn + 0.00000001
+   in distOut <= distIn + 0.00000001
 
 sfoldrSDoubleDiffL2HighSens = sfoldr @2 @2 @(SDouble Diff) @(SDouble Diff) @L2
 
@@ -187,7 +194,7 @@ sfoldrSDoubleDiscPropHighSens :: forall s4 s5. Double -> SList L2 (SDouble Diff)
 sfoldrSDoubleDiscPropHighSens randomNumber xs ys init =
   let distIn = distance xs ys
       distOut = distance (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init xs) (sfoldrSDoubleDiffL2HighSens (sfunctionTable2 (Proxy @2) (Proxy @2) randomNumber) init ys)
-  in distOut <= 2 * distIn + 0.00000001
+   in distOut <= 2 * distIn + 0.00000001
 
 sfoldrMain :: IO ()
 sfoldrMain = do
