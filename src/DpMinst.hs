@@ -56,6 +56,8 @@ import Sensitivity qualified as Solo
 import Test.QuickCheck (Arbitrary (arbitrary), Gen, Positive (Positive))
 import Test.QuickCheck.Gen (oneof)
 import Prelude
+import Primitives (Unsafe (wrap))
+import qualified Primitives as Primitives
 
 type FL i o =
   Network
@@ -136,6 +138,11 @@ trainDP rate network trainRows = Solo.do
 
 newtype SGradients (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len} deriving (Show)
 
+instance Unsafe (SGradients m len) where
+  type Unsens (SGradients m len) = R len
+  wrap = SGRAD2_UNSAFE
+  unwrap = unSGrad2
+
 instance (KnownNat h) => Distance (SGradients Solo.L2 h senv) where
   distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l)) (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l2))
 
@@ -144,6 +151,11 @@ laplaceGradients gradient = undefined
 
 -- The training row
 newtype STrainRow (m :: Solo.NMetric) (shapes :: [Shape]) (s :: Solo.SEnv) = STRAINROW_UNSAFE {unSTrainRow :: LabeledInput shapes} deriving (Show)
+
+instance Unsafe (STrainRow m shapes) where
+  type Unsens (STrainRow m shapes) = LabeledInput shapes
+  wrap = STRAINROW_UNSAFE
+  unwrap = unSTrainRow
 
 instance Distance (STrainRow Solo.Disc shapes senv) where
   distance a b =
@@ -187,11 +199,11 @@ clippedGrad ::
   SGradients Solo.L2 len (senv Solo.+++ senv)
 clippedGrad trainRows network =
   -- For every training example, backpropagate and clip the gradients
-  let grads = oneGrad . unSTrainRow <$> Solo.unSList trainRows
+  let grads = oneGrad <$> Primitives.unwrap trainRows
       clipAmount = 1.0
       flattenedGrads = (\v -> l2clipVector (flattenGrads v) clipAmount) <$> grads
       summedGrads =  foldr (+) (SA.konst 0) flattenedGrads
-   in SGRAD2_UNSAFE summedGrads
+   in wrap summedGrads
  where
   -- Takes single training example and calculates the gradient for that training example
   oneGrad (example, label) = backPropagate network example label
