@@ -36,6 +36,7 @@ import Sensitivity (
  )
 import Data.Foldable (fold)
 import Sensitivity qualified
+import Primitives (Unsafe(..))
 
 -- TODO remove Debug.traces when complete
 debug = True
@@ -163,8 +164,7 @@ genProp' parseSensitiveAST functionName = do
   let statements = LetE (concat distanceStatements <> distanceOutStatement) propertyStatement
       hasSFunction = any (\case GenFunction _ _ -> True; _ -> False) inputTypeNames
       inputs = (\(GeneratedArgName n) -> VarP n) <$> (inputs1 <> inputs2 <> nonSensitiveInputTypeName)
-      inputs' = if hasSFunction then inputs <> [VarP $ mkName "randomNumber"] else inputs
-      body = Clause inputs' (NormalB statements) []
+      body = Clause inputs (NormalB statements) []
   pure $ FunD propName [body]
  where
   noTypeAstsError :: String
@@ -373,8 +373,8 @@ genDistanceOutStatement :: Name -> [GeneratedInputOrFunction] -> [GeneratedArgNa
 genDistanceOutStatement functionName inputs nonSensitiveInputs =
   -- Recursively apply all inputs on function
   let applyInputsOnFunction = Prelude.foldl AppE (VarE functionName)
-      sensitiveInputs1 = (\case GenInput input1 _ _ _ -> VarE $ coerce input1; GenFunction n ast -> genSFunctionTable ast) <$> inputs
-      sensitiveInputs2 = (\case GenInput _ input2 _ _ -> VarE $ coerce input2; GenFunction n ast -> genSFunctionTable ast) <$> inputs
+      sensitiveInputs1 = (\case GenInput input1 _ _ _ -> VarE $ coerce input1; GenFunction n ast -> processHof ast) <$> inputs
+      sensitiveInputs2 = (\case GenInput _ input2 _ _ -> VarE $ coerce input2; GenFunction n ast -> processHof ast) <$> inputs
       nonSensitiveInputs' = VarE . coerce <$> nonSensitiveInputs
       function1Applied = applyInputsOnFunction (sensitiveInputs1 <> nonSensitiveInputs')
       function2Applied = applyInputsOnFunction (sensitiveInputs2 <> nonSensitiveInputs')
@@ -382,18 +382,10 @@ genDistanceOutStatement functionName inputs nonSensitiveInputs =
    where
      -- Generates a function table for higher order functions
      -- This could be improved to handle more unusual cases but for now it's sufficient
-     genSFunctionTable :: SensitiveAST -> Exp
-     genSFunctionTable ast =
-       let (args, senvToProxy) = mkSEnvToProxy ast (Set.empty, M.empty)
-           proxyArg i = SigE
-                       (ConE 'Proxy)
-                       (AppT (ConT ''Proxy) (LitT (NumTyLit i)))
-           randomArg = trace ("genSFunctionTAble : " <> show ast) $ VarE $ mkName "randomNumber"
-           proxyArgs = trace ("genSFunctionTAble : " <> show senvToProxy) $
-             (\name -> proxyArg $ head $ senvToProxy ! name) <$> Set.toList args
-           arity = length args
-           sFunctionTable = VarE $ mkName $ "sfunctionTable" <> if arity == 1 then "" else show arity
-       in foldl AppE sFunctionTable $ proxyArgs <> [randomArg]
+     processHof :: SensitiveAST -> Exp
+     processHof ast = case ast of
+        SFun (SEnv_ name) b -> LamE [VarP name ] $ processHof b
+        _ -> AppE (VarE 'wrap) (processS ast)
 
      mkSEnvToProxy :: SensitiveAST -> (Set Name, Map Name [Integer]) -> (Set Name, Map Name [Integer])
      mkSEnvToProxy ast acc@(args, senvAcc) = case ast of
@@ -403,6 +395,14 @@ genDistanceOutStatement functionName inputs nonSensitiveInputs =
         Plus' a b -> mkSEnvToProxy a acc <> mkSEnvToProxy b acc
         -- not supported yet
         _ -> (args, senvAcc)
+
+processS :: SensitiveAST -> Exp
+processS ast = case ast of
+  ScaleSens' a n -> AppE (AppE (VarE '(*)) (LitE $ IntegerL n)) (processS a)
+  SEnv_ name -> AppE (VarE 'unwrap) (VarE name)
+  TyLit_ n -> LitE $ IntegerL n
+  Plus' a b -> AppE (AppE (VarE '(+)) (processS a)) (processS b)
+  JoinSens' a b -> AppE (AppE (VarE 'max) (processS a)) (processS b)
 
 -- Generates:
 --  dout <= [[ sensitivity_expression ]]

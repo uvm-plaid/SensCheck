@@ -101,9 +101,9 @@ $( sensCheck
 --             clippedGradProp trainingRows1 trainingRows2 net0
 --     )
 
--- $( singleton <$> sensProperty 'SensStaticHMatrix.plus)
--- $( singleton <$> sensProperty 'SensStaticHMatrix.multIncorrect)
--- $( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult2)
+$( singleton <$> sensProperty 'SensStaticHMatrix.plus)
+$( singleton <$> sensProperty 'SensStaticHMatrix.multIncorrect)
+$( singleton <$> sensProperty 'SensStaticHMatrix.scalarMult2)
 
 -- testStaticPlus =
 --   quickCheck
@@ -159,10 +159,10 @@ main = do
   where
     pass = do
       putStrLn "\n\nThese tests are expected to pass:"
-      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) -> smapSDoubleDiffL2Prop l1 l2 random )
-      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) -> smapSDoubleDiffL2HighSensProp l1 l2 random )
-      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop random l1 acc1 l2 acc2)
-      quickCheck $ withMaxSuccess 100000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiscL2Prop random l1 acc1 l2 acc2)
+      quickCheck $ withMaxSuccess 10000 (\(SameSizedSLists l1 l2) -> smapSDoubleDiffL2Prop l1 l2)
+      quickCheck $ withMaxSuccess 10000 (\(SameSizedSLists l1 l2) -> smapSDoubleDiffL2HighSensProp l1 l2 )
+      quickCheck $ withMaxSuccess 10000 (\(SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL1Prop acc1 l1 acc2 l2 )
+      quickCheck $ withMaxSuccess 100000 (\(SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiscL2Prop acc1 l1 acc2 l2)
       -- testStaticPlus
       -- testStaticScalarMult
       passingTests
@@ -170,6 +170,6 @@ main = do
     fail = do
       putStrLn "\nThese tests are expected to fail:\n\n"
       -- failingTests
-      quickCheck (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2HighSensProp random l1 acc1 l2 acc2)
-      quickCheck $ withMaxSuccess 10000 (\random (SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2Prop random l1 acc1 l2 acc2)
+      quickCheck (\(SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2HighSensProp acc1 l1 acc2 l2)
+      quickCheck $ withMaxSuccess 10000 (\(SameSizedSLists l1 l2) acc1 acc2 -> sfoldrSDoubleDiffL2Prop acc1 l1 acc2 l2)
       -- testStaticMultIncorrect
