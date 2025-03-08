@@ -133,8 +133,9 @@ trainDP rate network trainRows = Solo.do
   let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
       gradSum = clippedGrad @len sensitiveTrainRows network
   noisyGrad <- laplaceGradients @e gradSum
-  -- return $ applyUpdate rate network (noisyGrad / (length trainRows)) -- TODO this expects Gradients not a single gradient
-  Solo.return $ applyUpdate rate network noisyGrad -- TODO divide by length trainRows
+  let scaledNoisyGrad = SA.dvmap (\grad -> grad / fromIntegral (length trainRows)) noisyGrad
+  let flattenedNoisyGrad = unflattenGrads scaledNoisyGrad
+  Solo.return $ applyUpdate rate network flattenedNoisyGrad
 
 newtype SGradients (m :: Solo.CMetric) len (s :: Solo.SEnv) = SGRAD2_UNSAFE {unSGrad2 :: R len} deriving (Show)
 
@@ -146,7 +147,7 @@ instance Unsafe (SGradients m len) where
 instance (KnownNat h) => Distance (SGradients Solo.L2 h senv) where
   distance (SGRAD2_UNSAFE l) (SGRAD2_UNSAFE l2) = Distance.l2dist (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l)) (D_UNSAFE @Solo.Diff <$> SAD.toList (SA.unwrap l2))
 
-laplaceGradients :: forall e s len layers. SGradients Solo.L2 len s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (Gradients layers)
+laplaceGradients :: forall e s len layers. SGradients Solo.L2 len s -> Solo.PM (Solo.TruncatePriv e Solo.Zero s) (R len)
 laplaceGradients gradient = undefined
 
 -- The training row
