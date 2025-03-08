@@ -130,7 +130,7 @@ trainDP ::
   [LabeledInput shapes] ->
   Solo.PM (Solo.TruncatePriv e Solo.Zero (s Solo.+++ s)) (Network layers shapes)
 trainDP rate network trainRows = Solo.do
-  let sensitiveTrainRows = Solo.SList_UNSAFE @Solo.L1 @_ @s $ STRAINROW_UNSAFE @Solo.Disc @shapes <$> trainRows
+  let sensitiveTrainRows = wrap @(SList Solo.L1 (STrainRow Solo.Disc shapes)) @s trainRows
       gradSum = clippedGrad @len sensitiveTrainRows network
   noisyGrad <- laplaceGradients @e gradSum
   let scaledNoisyGrad = SA.dvmap (\grad -> grad / fromIntegral (length trainRows)) noisyGrad
