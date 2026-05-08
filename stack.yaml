@@ -36,8 +36,8 @@ packages:
 # forks / in-progress versions pinned to a git hash. For example:
 #
 extra-deps:
- - git: git@github.com:HuwCampbell/grenade.git 
-   commit: 83cb4e4ec27ece8e7a7540d096bcf6c5ef3e8e7d
+ - git: git@github.com:psilospore/grenade.git
+   commit: 135bcafdb5981e3edf6916f64e4656e158b0fe50
 #  - MonadRandom-0.5.3@sha256:bb553af2bac914362a54983e4ed2e0b6352c09b73a1e1e280ec4befe14c4270c,1456
 #  - primitive-0.7.4.0@sha256:c2f0ed97b3dce97f2f43b239c3be8b136e4368f1eb7b61322ee9ac98f604622b,2982
 #  - vector-0.12.3.1@sha256:39141f312871b7c793a63be76635999e84d442aa3290aec59f30638ec0bf23a7,8218
